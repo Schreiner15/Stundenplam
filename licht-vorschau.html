@@ -123,6 +123,23 @@ pre { margin: 0; max-height: 420px; overflow: auto; font-family: var(--font-mono
 .regler input[type="range"] { width: 110px; padding: 0; }
 .regler input[type="checkbox"] { width: auto; }
 #feld-3d, #feld-2d { display: flex; flex-direction: column; gap: 8px; }
+.zeichenleiste { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 12px; color: var(--muted); }
+.zeichenleiste label { display: inline-flex; gap: 4px; align-items: center; }
+.zeichenleiste input[inputmode] { width: 52px; padding: 3px 5px; }
+.zeichenleiste input[type="checkbox"] { width: auto; }
+.zeichnen-knopf { font-weight: 600; }
+.zeichenleiste button:disabled { opacity: 0.45; cursor: default; }
+.zeichnen-knopf[aria-pressed="true"] { background: #0e7490; border-color: #0e7490; color: #fff; }
+.zeichen-status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0; padding: 6px 10px; border-radius: 4px; background: color-mix(in srgb, #22d3ee 16%, transparent); border: 1px solid color-mix(in srgb, #22d3ee 55%, transparent); font-family: var(--font-mono); font-size: 12px; }
+.liste-linien { display: flex; flex-direction: column; gap: 6px; }
+.linie-eintrag { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px; border: 1px dashed #22d3ee; border-radius: 5px; background: var(--bg); }
+.linie-eintrag .info { flex: 1 1 140px; white-space: normal; }
+.umwandeln { background: #0e7490; border-color: #0e7490; color: #fff; font-weight: 600; }
+.umwandeln:hover { color: #fff; filter: brightness(1.1); }
+.punkte { display: grid; grid-template-columns: auto repeat(3, minmax(0, 1fr)) auto; gap: 4px; align-items: center; font-size: 11px; color: var(--muted); }
+.punkte input { padding: 3px 5px; font-size: 12px; }
+.punkte button { padding: 2px 6px; font-size: 11px; color: var(--fehler); }
+#vorne.zeichnet { cursor: crosshair; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 
@@ -154,6 +171,11 @@ pre { margin: 0; max-height: 420px; overflow: auto; font-family: var(--font-mono
       <button type="button" id="vorlage">Beispielbeleuchtung laden</button>
     </section>
     <section class="block">
+      <h2>Gezeichnete Linien</h2>
+      <div id="linien" class="liste-linien"></div>
+      <p class="leise">Mit „✏ Linie zeichnen" auf eine Möbel-, Wand- oder Bodenfläche klicken; Doppelklick, Enter oder Klick auf den letzten Punkt beendet die Linie. Danach „→ Lichtquelle".</p>
+    </section>
+    <section class="block">
       <h2>Prüfflächen</h2>
       <div class="felder"><div class="feld"><label for="soll">Soll (lx)</label><input id="soll" inputmode="decimal"></div></div>
       <div class="pruef-liste" id="pruefliste"></div>
@@ -169,11 +191,21 @@ pre { margin: 0; max-height: 420px; overflow: auto; font-family: var(--font-mono
           <button type="button" id="ansicht-3d" data-ansicht="3d" aria-pressed="true">3D</button>
           <button type="button" id="ansicht-2d" data-ansicht="2d" aria-pressed="false">2D Vorderansicht</button>
         </div>
+        <div class="zeichenleiste">
+          <button type="button" id="zeichnen" class="zeichnen-knopf" aria-pressed="false">✏ Linie zeichnen</button>
+          <button type="button" id="z-fertig" disabled>Fertig</button>
+          <button type="button" id="z-zurueck" disabled>Punkt zurück</button>
+          <button type="button" id="z-abbrechen" disabled>Abbrechen</button>
+          <label for="z-raster">Raster <input id="z-raster" inputmode="decimal" value="10"> mm</label>
+          <label for="z-kante">Kantenabstand <input id="z-kante" inputmode="decimal" value="20"> mm</label>
+          <label><input type="checkbox" id="z-winkel" checked> rechtwinklig</label>
+        </div>
         <div id="feld-3d">
           <div id="buehne" class="buehne"></div>
+          <p class="zeichen-status" id="z-status-3d" aria-hidden="true" hidden></p>
           <div class="regler">
             <div class="segment klein-segment" role="group" aria-label="Kamera">
-              <button type="button" data-kamera="vorne">vorne</button><button type="button" data-kamera="schraeg">schräg</button><button type="button" data-kamera="oben">oben</button>
+              <button type="button" data-kamera="vorne">vorne</button><button type="button" data-kamera="schraeg">schräg</button><button type="button" data-kamera="oben">oben</button><button type="button" data-kamera="unten">unten</button>
             </div>
             <label for="belichtung">Belichtung <input type="range" id="belichtung" min="-3" max="3" step="0.25" value="0"></label>
             <label for="raumlicht">Raumlicht <input type="range" id="raumlicht" min="0" max="40" step="1" value="5"></label>
@@ -182,6 +214,7 @@ pre { margin: 0; max-height: 420px; overflow: auto; font-family: var(--font-mono
           </div>
           <p class="leise" id="hinweis-3d">Ziehen dreht, Mausrad zoomt, Rechtsklick verschiebt. Lichtstärken physikalisch in Candela, Schatten durch Möbelteile.</p>
         </div>
+        <p class="zeichen-status" id="z-status" aria-live="polite" hidden></p>
         <div id="feld-2d" hidden>
           <svg id="vorne" role="img" aria-label="Vorderansicht des Möbels mit Lichtkegeln"></svg>
           <p class="leise">Kegel = Abstrahlwinkel (50 % der Spitzenlichtstärke), Farbe nach Lichtfarbe in Kelvin. Böden verdecken das Licht.</p>

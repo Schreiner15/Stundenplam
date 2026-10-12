@@ -11,6 +11,7 @@ const SPEICHER = 'moebel-lichtplaner-v1';
 // Sequentielle Rampe (eine Farbe, hell → dunkel) für die Beleuchtungsstärke
 const RAMPE = ['#cde2fb', '#b7d3f6', '#9ec5f4', '#86b6ef', '#6da7ec', '#5598e7', '#3987e5', '#2a78d6', '#256abf', '#1c5cab', '#184f95', '#104281', '#0d366b'];
 const KELVIN = [2700, 3000, 4000, 6500];
+const RICHTUNGEN = [['nach unten', { x: 0, y: 0, z: -1 }], ['nach oben', { x: 0, y: 0, z: 1 }], ['nach vorne', { x: 0, y: -1, z: 0 }], ['nach hinten', { x: 0, y: 1, z: 0 }], ['nach rechts', { x: 1, y: 0, z: 0 }], ['nach links', { x: -1, y: 0, z: 0 }]];
 
 let z = laden() ?? startZustand();
 let moebel = null;
@@ -18,6 +19,8 @@ let ergebnis = null;
 let reiter = 'stueck';
 let ansicht = 'ansicht' in (z ?? {}) ? z.ansicht : '3d';
 let drei = null;
+// Zugriff für automatisierte Oberflächentests
+globalThis.lichtplaner = { get drei() { return drei; }, get zustand() { return z; }, get ergebnis() { return ergebnis; } };
 const offen = new Set();
 
 function startZustand() {
@@ -85,6 +88,18 @@ function leuchteFelder(l, i) {
     h += zahlFeld(`${p}-abstandVorne`, 'Abstand vorne', b.abstandVorne, '100');
     h += auswahl(`${p}-kelvin`, 'Lichtfarbe', l.kelvin ?? 3000, KELVIN.map((k) => [k, `${k} K`]));
     h += auswahl(`${p}-kabel`, 'Kabel', b.kabel ?? 'bohrung', [['bohrung', 'Bohrung Ø 8'], ['nut', 'Kabelnut'], ['keine', 'keine']]);
+  } else if (l.typ === 'linie') {
+    const info = ergebnis?.leuchten.find((x) => x.id === l.id);
+    h += `<p class="leise feld breit">${info ? (info.teil ? `liegt auf ${esc(info.teil)} · ${esc(info.flaeche)} → strahlt von der Fläche weg` : 'frei im Raum') + ` · ${de(info.laenge, 0)} mm, ${info.segmente} Segment${info.segmente > 1 ? 'e' : ''}` : ''}</p>`;
+    h += auswahl(`${p}-profil`, 'Profil', l.profil ?? 'aufbau', [['keins', 'LED-Streifen ohne Profil'], ...Object.entries(PROFILE).map(([k, v]) => [k, v.name.replace('Alu-', '')])], true);
+    h += auswahl(`${p}-kelvin`, 'Lichtfarbe', l.streifen?.kelvin ?? 3000, KELVIN.map((k) => [k, `${k} K`]));
+    h += zahlFeld(`${p}-wpm`, 'W/m', l.streifen?.wattProMeter, '9,6');
+    h += zahlFeld(`${p}-lpm`, 'lm/m', l.streifen?.lumenProMeter, '1000');
+    h += auswahl(`${p}-spannung`, 'Spannung', l.streifen?.spannung ?? 24, [[24, '24 V'], [12, '12 V']]);
+    const abstr = typeof l.abstrahlung === 'object' ? JSON.stringify(l.abstrahlung) : (l.abstrahlung ?? 'auto');
+    h += auswahl(`${p}-abstrahlung`, 'Abstrahlung', abstr, [['auto', 'von der Fläche weg'], ['rundum', 'rundum (360°)'], ...RICHTUNGEN.map(([n, v]) => [JSON.stringify(v), n])]);
+    h += auswahl(`${p}-kabel`, 'Kabel', l.befestigung?.kabel ?? l.kabel ?? 'nut', [['nut', 'Kabelnut'], ['bohrung', 'Bohrung Ø 8'], ['keine', 'keine']]);
+    h += `<div class="feld breit"><label>Punkte (mm, Welt: x Breite, y Tiefe, z Höhe)</label><div class="punkte">${(l.punkte ?? []).map((q, j) => `<span>${j + 1}</span>${['x', 'y', 'z'].map((a) => `<input id="${p}-pt${j}-${a}" inputmode="decimal" value="${q[a]}" aria-label="Punkt ${j + 1} ${a}">`).join('')}<button type="button" data-pt-weg="${i}:${j}" aria-label="Punkt ${j + 1} löschen">✕</button>`).join('')}</div></div>`;
   } else {
     h += zahlFeld(`${p}-px`, 'x', l.position?.x);
     h += zahlFeld(`${p}-py`, 'y', l.position?.y);
@@ -98,8 +113,11 @@ function leuchteFelder(l, i) {
 function zeichneLeuchten() {
   $('#leuchten').innerHTML = z.leuchten.map((l, i) => {
     const kelvin = l.streifen?.kelvin ?? l.kelvin ?? 3000;
-    const name = { ledProfil: 'LED-Profil', spot: 'Spots', punktlicht: 'Punktlicht' }[l.typ] ?? l.typ;
-    const info = l.befestigung ? `${l.befestigung.teil} · ${l.befestigung.flaeche}${l.befestigung.anzahl ? ` · ${l.befestigung.anzahl}×` : ''}` : 'frei im Raum';
+    const name = { ledProfil: 'LED-Profil', spot: 'Spots', punktlicht: 'Punktlicht', linie: 'Linienlicht' }[l.typ] ?? l.typ;
+    const erg = ergebnis?.leuchten.find((x) => x.id === l.id);
+    const info = l.typ === 'linie'
+      ? `${(l.punkte ?? []).length} Punkte · ${erg?.teil ? `${erg.teil} ${erg.flaeche}` : 'frei'}`
+      : l.befestigung ? `${l.befestigung.teil} · ${l.befestigung.flaeche}${l.befestigung.anzahl ? ` · ${l.befestigung.anzahl}×` : ''}` : 'frei im Raum';
     return `<details class="leuchte" data-i="${i}"${offen.has(i) ? ' open' : ''}><summary><i class="lampe" style="background:${rgb(kelvin)}"></i>
       <span class="titel">${esc(name)}</span><span class="info">${esc(l.id)} · ${esc(info)} · ${kelvin} K</span></summary>
       <div class="inhalt">${leuchteFelder(l, i)}<button type="button" class="weg" data-weg="${i}">Leuchte entfernen</button></div></details>`;
@@ -110,6 +128,11 @@ function zeichneLeuchten() {
   z.leuchten.forEach(bindeLeuchte);
   document.querySelectorAll('[data-weg]').forEach((b) => b.addEventListener('click', () => {
     z.leuchten.splice(Number(b.dataset.weg), 1); offen.clear(); zeichneLeuchten(); aktualisiere();
+  }));
+  document.querySelectorAll('[data-pt-weg]').forEach((b) => b.addEventListener('click', () => {
+    const [i, j] = b.dataset.ptWeg.split(':').map(Number);
+    z.leuchten[i].punkte.splice(j, 1);
+    offen.add(i); aktualisiere(); zeichneLeuchten();
   }));
 }
 
@@ -130,9 +153,17 @@ function bindeLeuchte(l, i) {
   $(`${p}-profil`)?.addEventListener('change', (ev) => { l.profil = ev.target.value; neu(); });
   $(`${p}-modell`)?.addEventListener('change', (ev) => { l.modell = ev.target.value; neu(); });
   $(`${p}-kabel`)?.addEventListener('change', (ev) => { bef().kabel = ev.target.value; aktualisiere(); });
+  $(`${p}-abstrahlung`)?.addEventListener('change', (ev) => {
+    const v = ev.target.value;
+    l.abstrahlung = v.startsWith('{') ? JSON.parse(v) : v;
+    neu();
+  });
+  (l.punkte ?? []).forEach((q, j) => {
+    for (const a of ['x', 'y', 'z']) zahl(`${p}-pt${j}-${a}`, (v) => { q[a] = v ?? 0; });
+  });
   $(`${p}-kelvin`)?.addEventListener('change', (ev) => {
     const k = Number(ev.target.value);
-    if (l.typ === 'ledProfil') (l.streifen ??= {}).kelvin = k; else l.kelvin = k;
+    if (l.typ === 'ledProfil' || l.typ === 'linie') (l.streifen ??= {}).kelvin = k; else l.kelvin = k;
     neu();
   });
   $(`${p}-spannung`)?.addEventListener('change', (ev) => { (l.streifen ??= {}).spannung = Number(ev.target.value); aktualisiere(); });
@@ -218,31 +249,40 @@ function zeichneVorne() {
   const svg = $('#vorne');
   svg.setAttribute('viewBox', `${-fs * 4} ${-fs * 1.5} ${B + fs * 5} ${H + fs * 4.5}`);
   const y = (v) => H - v;
-  let h = `<defs><clipPath id="innen"><rect x="${k.seitenStaerke}" y="0" width="${B - 2 * k.seitenStaerke}" height="${H}"/></clipPath></defs>`;
+  let h = `<defs><clipPath id="innen"><rect x="${k.seitenStaerke}" y="0" width="${B - 2 * k.seitenStaerke}" height="${H}"/></clipPath>
+    <filter id="weich" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="${fs * 0.8}"/></filter></defs>`;
   h += `<rect x="0" y="0" width="${B}" height="${H}" fill="var(--nacht)"/>`;
   // Lichtkegel
   h += '<g clip-path="url(#innen)" style="mix-blend-mode:screen">';
-  ergebnis.leuchten.forEach((l, i) => {
-    if (!l.richtung) return;
-    const r = { x: l.richtung.x, z: l.richtung.z };
-    const len = Math.hypot(r.x, r.z);
-    if (len < 0.2) return;
-    const rx = r.x / len;
-    const rz = r.z / len;
-    const a = l.anfang ?? l.position;
-    const e = l.ende ?? l.position;
-    const d = Math.max(20, reichweite(l.position, { x: rx, z: rz }, k));
-    const spreiz = Math.tan(((l.abstrahlwinkel ?? 120) / 2) * Math.PI / 180) * d;
-    const qx = -rz; const qz = rx; // quer zur Richtung in der Ansichtsebene
-    // Anfang/Ende entlang der Querrichtung sortieren, dann beidseitig um die Spreizung aufweiten
-    const [p1, p2] = [[a.x, a.z], [e.x, e.z]].sort((u, v) => (u[0] * qx + u[1] * qz) - (v[0] * qx + v[1] * qz));
-    const ziel1 = [p1[0] + rx * d - qx * spreiz, p1[1] + rz * d - qz * spreiz];
-    const ziel2 = [p2[0] + rx * d + qx * spreiz, p2[1] + rz * d + qz * spreiz];
+  let gi = 0;
+  for (const l of ergebnis.leuchten) {
     const farbe = rgb(l.kelvin);
-    h += `<linearGradient id="g${i}" gradientUnits="userSpaceOnUse" x1="${l.position.x}" y1="${y(l.position.z)}" x2="${l.position.x + rx * d}" y2="${y(l.position.z + rz * d)}">
-      <stop offset="0" stop-color="${farbe}" stop-opacity="0.8"/><stop offset="1" stop-color="${farbe}" stop-opacity="0.12"/></linearGradient>`;
-    h += `<polygon points="${p1[0]},${y(p1[1])} ${p2[0]},${y(p2[1])} ${ziel2[0]},${y(ziel2[1])} ${ziel1[0]},${y(ziel1[1])}" fill="url(#g${i})"><title>${esc(l.id)}: ${de(l.lumen, 0)} lm, ${l.kelvin} K</title></polygon>`;
-  });
+    const zug = l.punkte ?? (l.anfang ? [l.anfang, l.ende] : [l.position]);
+    if (!l.richtung) {
+      // rundum strahlende Linie oder Punktlicht: weicher Lichthof
+      if (zug.length > 1) h += `<polyline points="${zug.map((q) => `${q.x},${y(q.z)}`).join(' ')}" fill="none" stroke="${farbe}" stroke-opacity="0.35" stroke-width="${fs * 4}" stroke-linecap="round" stroke-linejoin="round" filter="url(#weich)"/>`;
+      continue;
+    }
+    const len = Math.hypot(l.richtung.x, l.richtung.z);
+    if (len < 0.2) continue;
+    const rx = l.richtung.x / len;
+    const rz = l.richtung.z / len;
+    const qx = -rz; const qz = rx; // quer zur Richtung in der Ansichtsebene
+    const segmente = zug.length > 1 ? zug.slice(0, -1).map((a, j) => [a, zug[j + 1]]) : [[zug[0], zug[0]]];
+    for (const [a, e] of segmente) {
+      const mitte = { x: (a.x + e.x) / 2, z: (a.z + e.z) / 2 };
+      const d = Math.max(20, reichweite(mitte, { x: rx, z: rz }, k));
+      const spreiz = Math.tan(((l.abstrahlwinkel ?? 120) / 2) * Math.PI / 180) * d;
+      // Anfang/Ende entlang der Querrichtung sortieren, dann beidseitig um die Spreizung aufweiten
+      const [p1, p2] = [[a.x, a.z], [e.x, e.z]].sort((u, v) => (u[0] * qx + u[1] * qz) - (v[0] * qx + v[1] * qz));
+      const ziel1 = [p1[0] + rx * d - qx * spreiz, p1[1] + rz * d - qz * spreiz];
+      const ziel2 = [p2[0] + rx * d + qx * spreiz, p2[1] + rz * d + qz * spreiz];
+      gi++;
+      h += `<linearGradient id="g${gi}" gradientUnits="userSpaceOnUse" x1="${mitte.x}" y1="${y(mitte.z)}" x2="${mitte.x + rx * d}" y2="${y(mitte.z + rz * d)}">
+        <stop offset="0" stop-color="${farbe}" stop-opacity="0.8"/><stop offset="1" stop-color="${farbe}" stop-opacity="0.12"/></linearGradient>`;
+      h += `<polygon points="${p1[0]},${y(p1[1])} ${p2[0]},${y(p2[1])} ${ziel2[0]},${y(ziel2[1])} ${ziel1[0]},${y(ziel1[1])}" fill="url(#g${gi})"><title>${esc(l.id)}: ${de(l.lumen, 0)} lm, ${l.kelvin} K</title></polygon>`;
+    }
+  }
   h += '</g>';
   // Möbelteile
   for (const kat of ['rueckwand', 'zarge', 'boden', 'sockelblende', 'seite']) {
@@ -256,10 +296,20 @@ function zeichneVorne() {
   for (const l of ergebnis.leuchten) {
     const farbe = rgb(l.kelvin);
     if (l.anfang) {
-      h += `<line x1="${l.anfang.x}" y1="${y(l.anfang.z)}" x2="${l.ende.x}" y2="${y(l.ende.z)}" stroke="${farbe}" stroke-width="${fs * 0.35}" stroke-linecap="round"><title>${esc(l.id)}</title></line>`;
+      const zug = l.punkte ?? [l.anfang, l.ende];
+      h += `<polyline points="${zug.map((q) => `${q.x},${y(q.z)}`).join(' ')}" fill="none" stroke="${farbe}" stroke-width="${fs * 0.35}" stroke-linecap="round" stroke-linejoin="round"><title>${esc(l.id)}</title></polyline>`;
     } else {
       h += `<circle cx="${l.position.x}" cy="${y(l.position.z)}" r="${fs * 0.45}" fill="${farbe}" stroke="var(--nacht)" stroke-width="1" vector-effect="non-scaling-stroke"><title>${esc(l.id)}</title></circle>`;
     }
+  }
+  // Gezeichnete Linien (gestrichelt) und laufende Zeichnung
+  const strich = (pts, extra = '') => `<polyline points="${pts.map((q) => `${q.x},${y(q.z)}`).join(' ')}" fill="none" stroke="#22d3ee" stroke-width="${fs * 0.22}" stroke-linecap="round" stroke-linejoin="round" ${extra}/>`;
+  for (const lin of z.linien ?? []) h += strich(lin.punkte, `stroke-dasharray="${fs * 0.6} ${fs * 0.4}"`);
+  if (zeichnen2d) {
+    const kette = [...zeichnen2d.punkte, ...(zeichnen2d.cursor ? [zeichnen2d.cursor] : [])];
+    if (kette.length > 1) h += strich(kette);
+    kette.forEach((q, j) => { h += `<circle cx="${q.x}" cy="${y(q.z)}" r="${fs * (j === kette.length - 1 && zeichnen2d.cursor ? 0.4 : 0.3)}" fill="#22d3ee"/>`; });
+    if (zeichnen2d.cursor) h += `<text x="${zeichnen2d.cursor.x + fs * 0.6}" y="${y(zeichnen2d.cursor.z) - fs * 0.6}" font-size="${fs * 0.8}" fill="#22d3ee">${de(zeichnen2d.cursor.x, 0)} / ${de(zeichnen2d.cursor.z, 0)}</text>`;
   }
   // Maße
   h += `<line x1="0" y1="${H + fs * 1.6}" x2="${B}" y2="${H + fs * 1.6}" stroke="var(--accent)" stroke-width="1" vector-effect="non-scaling-stroke"/>
@@ -380,13 +430,168 @@ function zeige3D() {
   if (ansicht !== '3d') return;
   try {
     drei ??= new Ansicht3D($('#buehne'));
-    drei.zeige(moebel, ergebnis);
+    drei.zeige(moebel, ergebnis, z.linien ?? []);
   } catch (err) {
     $('#hinweis-3d').textContent = `3D nicht verfügbar (${err.message}). Die 2D-Ansicht funktioniert weiterhin.`;
   }
 }
 
+// ── Linien zeichnen und in Lichtquellen umwandeln ───────────────────────────
+
+let zeichnen2d = null; // { punkte, ebeneZ, cursor }
+const zeichenOptionen = () => ({
+  raster: Math.max(0, leseZahl($('#z-raster'), true) ?? 10),
+  kantenAbstand: Math.max(0, leseZahl($('#z-kante'), true) ?? 20),
+  rechtwinklig: $('#z-winkel').checked,
+});
+
+function zeigeZeichenStatus(info) {
+  // Status steht unter der jeweiligen Ansicht, damit die Zeichenfläche beim Zeichnen nicht springt
+  const st = ansicht === '3d' ? $('#z-status-3d') : $('#z-status');
+  for (const el of [$('#z-status'), $('#z-status-3d')]) if (el !== st) el.hidden = true;
+  if (!info) { st.hidden = true; return; }
+  st.hidden = false;
+  const c = info.cursor;
+  st.textContent = info.punkte === 0
+    ? `Auf eine Fläche klicken, um die Linie zu beginnen${c ? ` · Zeiger x ${de(c.x, 0)} y ${de(c.y, 0)} z ${de(c.z, 0)}` : ''}`
+    : `${info.punkte} Punkt${info.punkte > 1 ? 'e' : ''} · ${de(info.laenge, 0)} mm${info.auf ? ` · auf ${info.auf}` : ''} · Doppelklick / Enter beendet`;
+}
+
+function setzeZeichnen(an) {
+  $('#zeichnen').setAttribute('aria-pressed', String(an));
+  for (const id of ['#z-fertig', '#z-zurueck', '#z-abbrechen']) $(id).disabled = !an;
+  $('#vorne').classList.toggle('zeichnet', an);
+  if (!an) {
+    drei?.abbrechen();
+    zeichnen2d = null;
+    zeigeZeichenStatus(null);
+    zeichneVorne();
+    return;
+  }
+  if (ansicht === '3d' && drei) {
+    drei.starteZeichnen(zeichenOptionen(), zeigeZeichenStatus, linieFertig);
+  } else {
+    zeichnen2d = { punkte: [], ebeneZ: null, cursor: null };
+    zeigeZeichenStatus({ punkte: 0 });
+  }
+}
+
+function linieFertig(linie) {
+  z.linien ??= [];
+  const n = Math.max(0, ...z.linien.map((x) => Number(String(x.id).split('-')[1]) || 0), ...z.leuchten.filter((x) => x.typ === 'linie').map((x) => Number(String(x.id).split('-')[1]) || 0)) + 1;
+  z.linien.push({ id: `linie-${n}`, ...linie });
+  setzeZeichnen(false);
+  zeichneLinien();
+  aktualisiere();
+}
+
+function zeichneLinien() {
+  const liste = z.linien ?? [];
+  $('#linien').innerHTML = liste.length ? liste.map((lin, i) => {
+    let laenge = 0;
+    for (let k = 0; k + 1 < lin.punkte.length; k++) laenge += Math.hypot(lin.punkte[k + 1].x - lin.punkte[k].x, lin.punkte[k + 1].y - lin.punkte[k].y, lin.punkte[k + 1].z - lin.punkte[k].z);
+    return `<div class="linie-eintrag"><span class="info"><b>${esc(lin.id)}</b> · ${lin.punkte.length} Punkte · ${de(laenge, 0)} mm${lin.auf ? ` · ${esc(lin.auf)}` : ''}</span>
+      <button type="button" class="umwandeln" data-umwandeln="${i}">→ Lichtquelle</button>
+      <button type="button" class="weg" data-linie-weg="${i}">Löschen</button></div>`;
+  }).join('') : '<p class="leise">Noch keine Linie gezeichnet.</p>';
+  document.querySelectorAll('[data-umwandeln]').forEach((b) => b.addEventListener('click', () => umwandeln(Number(b.dataset.umwandeln))));
+  document.querySelectorAll('[data-linie-weg]').forEach((b) => b.addEventListener('click', () => {
+    z.linien.splice(Number(b.dataset.linieWeg), 1); zeichneLinien(); aktualisiere();
+  }));
+}
+
+/** Gezeichnete Linie → Lichtquelle (Typ „linie"). Liegt sie auf keiner Möbelfläche, strahlt sie von ihrer Zeichenfläche weg. */
+function umwandeln(i) {
+  const lin = z.linien[i];
+  const leuchte = { id: lin.id, typ: 'linie', profil: 'aufbau', punkte: lin.punkte.map((q) => ({ ...q })), streifen: { kelvin: 3000 } };
+  const probe = berechneLicht({ moebel, leuchten: [leuchte] }).leuchten[0];
+  if (!probe?.teil && lin.normale) leuchte.abstrahlung = lin.normale;
+  z.linien.splice(i, 1);
+  z.leuchten.push(leuchte);
+  offen.clear();
+  offen.add(z.leuchten.length - 1);
+  zeichneLinien();
+  aktualisiere();
+  zeichneLeuchten();
+}
+
+/** 2D-Vorderansicht: Klick → Punkt (x, z), Tiefe y = Kantenabstand; Fang an Bodenflächen, Seiten und Raster. */
+function fang2d(ev) {
+  const svg = $('#vorne');
+  const pt = svg.createSVGPoint();
+  pt.x = ev.clientX; pt.y = ev.clientY;
+  const q = pt.matrixTransform(svg.getScreenCTM().inverse());
+  const k = moebel.korpus;
+  const o = zeichenOptionen();
+  const fang = Math.max(25, k.hoehe / 80);
+  let x = q.x;
+  let zz = k.hoehe - q.y;
+  const innen = [k.seitenStaerke, k.breite - k.seitenStaerke];
+  if (Math.abs(x - innen[0]) < fang) x = innen[0] + o.kantenAbstand;
+  else if (Math.abs(x - innen[1]) < fang) x = innen[1] - o.kantenAbstand;
+  else if (o.raster) x = Math.round(x / o.raster) * o.raster;
+  if (zeichnen2d.ebeneZ !== null) zz = zeichnen2d.ebeneZ;
+  else {
+    const flaechen = moebel.teile.filter((t) => t.kategorie === 'boden' && t.lage.x <= x && t.lage.x + t.lage.dx >= x).flatMap((t) => [t.lage.z, t.lage.z + t.lage.dz]);
+    const nah = flaechen.sort((a, b) => Math.abs(a - zz) - Math.abs(b - zz))[0];
+    if (nah !== undefined && Math.abs(nah - zz) < fang) zz = nah;
+    else if (o.raster) zz = Math.round(zz / o.raster) * o.raster;
+  }
+  const p = { x: Math.round(x * 10) / 10, y: o.kantenAbstand, z: Math.round(zz * 10) / 10 };
+  const letzter = zeichnen2d.punkte.at(-1);
+  if (letzter && o.rechtwinklig) { if (Math.abs(p.x - letzter.x) >= Math.abs(p.z - letzter.z)) p.z = letzter.z; else p.x = letzter.x; }
+  return p;
+}
+
+function fertig2d() {
+  if (!zeichnen2d || zeichnen2d.punkte.length < 2) return;
+  const auf = zeichnen2d.ebeneZ !== null ? `Bodenfläche z ${de(zeichnen2d.ebeneZ, 1)}` : 'frei (Vorderansicht)';
+  linieFertig({ punkte: zeichnen2d.punkte, normale: { x: 0, y: -1, z: 0 }, auf });
+}
+
+$('#vorne').addEventListener('click', (ev) => {
+  if (!zeichnen2d) return;
+  const p = fang2d(ev);
+  const letzter = zeichnen2d.punkte.at(-1);
+  if (letzter && Math.hypot(p.x - letzter.x, p.z - letzter.z) < 1) { fertig2d(); return; }
+  if (!zeichnen2d.punkte.length) {
+    // Liegt der erste Punkt auf einer Bodenfläche, bleibt die Linie auf dieser Höhe
+    const aufBoden = moebel.teile.some((t) => t.kategorie === 'boden' && (Math.abs(t.lage.z - p.z) < 0.01 || Math.abs(t.lage.z + t.lage.dz - p.z) < 0.01));
+    zeichnen2d.ebeneZ = aufBoden ? p.z : null;
+  }
+  zeichnen2d.punkte.push(p);
+  zeichneVorne();
+  zeigeZeichenStatus({ punkte: zeichnen2d.punkte.length, laenge: laengeVon(zeichnen2d.punkte), auf: zeichnen2d.ebeneZ !== null ? 'Bodenfläche' : null });
+});
+$('#vorne').addEventListener('mousemove', (ev) => {
+  if (!zeichnen2d) return;
+  zeichnen2d.cursor = fang2d(ev);
+  zeichneVorne();
+});
+$('#vorne').addEventListener('dblclick', fertig2d);
+
+function laengeVon(pts) {
+  let l = 0;
+  for (let k = 0; k + 1 < pts.length; k++) l += Math.hypot(pts[k + 1].x - pts[k].x, pts[k + 1].y - pts[k].y, pts[k + 1].z - pts[k].z);
+  return l;
+}
+
+$('#zeichnen').addEventListener('click', () => setzeZeichnen($('#zeichnen').getAttribute('aria-pressed') !== 'true'));
+$('#z-fertig').addEventListener('click', () => { if (zeichnen2d) fertig2d(); else drei?.fertig(); });
+$('#z-zurueck').addEventListener('click', () => {
+  if (zeichnen2d) { zeichnen2d.punkte.pop(); if (!zeichnen2d.punkte.length) zeichnen2d.ebeneZ = null; zeichneVorne(); } else drei?.punktZurueck();
+});
+$('#z-abbrechen').addEventListener('click', () => setzeZeichnen(false));
+for (const id of ['#z-raster', '#z-kante', '#z-winkel']) $(id).addEventListener('change', () => drei?.setzeZeichenOptionen(zeichenOptionen()));
+document.addEventListener('keydown', (ev) => {
+  if ($('#zeichnen').getAttribute('aria-pressed') !== 'true' || ev.target.matches('input, select, textarea')) return;
+  if (ev.key === 'Enter') { ev.preventDefault(); if (zeichnen2d) fertig2d(); else drei?.fertig(); }
+  if (ev.key === 'Escape') setzeZeichnen(false);
+  if (ev.key === 'Backspace') { ev.preventDefault(); $('#z-zurueck').click(); }
+});
+
 function setzeAnsicht(neu) {
+  if ($('#zeichnen').getAttribute('aria-pressed') === 'true') setzeZeichnen(false);
   ansicht = neu;
   z.ansicht = neu;
   speichern();
@@ -410,5 +615,7 @@ baueMoebel();
 offen.add(0);
 zeichneLeuchten();
 zeichnePruefliste();
+zeichneLinien();
 aktualisiere();
+zeichneLeuchten();
 setzeAnsicht(ansicht);

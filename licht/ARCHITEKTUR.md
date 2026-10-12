@@ -20,6 +20,28 @@ berechneLicht({ moebel, leuchten, netzteil, pruefflaechen })
 | `punktlicht` | Raumleuchte (Glühlampe, Pendel), strahlt in alle Richtungen | Weltposition | – |
 | `flaechenlicht` | LED-Panel, Fenster, Lichtdecke (lambertsch) | Weltposition, Größe, Richtung | – |
 
+| `linie` | **gezeichnete Linie → Lichtquelle**: beliebige Polylinie (LED-Streifen mit/ohne Profil) | automatisch erkannte Möbelfläche oder frei im Raum | Einbau: Nut je Segment (auch schräg); Kabelführung |
+
+### Linienlicht (Typ `linie`)
+
+```js
+{ id: 'linie-1', typ: 'linie', punkte: [{ x, y, z }, …],          // Weltkoordinaten in mm, ≥ 2 Punkte
+  profil: 'keins' | 'aufbau' | 'einbau' | 'eck',                   // Standard: aufbau
+  abstrahlung: 'auto' | 'rundum' | { x, y, z },                    // auto = Normale der erkannten Fläche
+  streifen: { wattProMeter, lumenProMeter, kelvin, spannung, schnittraster, abstrahlwinkel },
+  befestigung: { teil?, flaeche?, kabel: 'nut' | 'bohrung' | 'keine' } }
+```
+
+- Liegen alle Punkte (±1 mm) auf einer Bodenfläche (oben/unten) oder Seiten-Innenfläche, wird diese als Befestigung
+  erkannt; die Punkte werden in Teilkoordinaten umgerechnet (Nuten, Kabelführung, Kollisionsprüfung).
+- Liegt die Linie frei (Wand, Decke, Vorderkante), entsteht keine Bearbeitung; Abstrahlung rundum oder die beim
+  Zeichnen erfasste Flächennormale.
+- Länge = Summe der Segmente; Profilzuschnitt je Segment, Eckverbinder an jedem Knick.
+- Zeichenwerkzeug der Vorschau: Raycast auf Möbel-/Raumflächen, Zeichenebene = getroffene Fläche,
+  Raster-, Kanten- (Abstand zur Kante) und Winkelfang; Enter/Doppelklick beendet, „→ Lichtquelle" wandelt um.
+- Diagnose `KEIN_LICHT`: Erhält eine Prüffläche 0 lx, wird der Grund genannt (Leuchten strahlen weg oder
+  „verdeckt durch …").
+
 Später (Phase 2/3): Sonne/Richtungslicht, Umgebung/HDRI, IES/LDT-Import (Feld `verteilung` ist vorgesehen).
 
 ## 2. Koordinaten
