@@ -1,0 +1,201 @@
+<title>Korpus-Bodenplaner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: Werkstattzeichnung – links Parameter-Leiste, rechts maßstäbliche Ansichten, darunter Daten-Reiter */
+:root {
+  --bg: #f3f4f1;
+  --surface: #fbfbf9;
+  --ink: #1d2325;
+  --muted: #5f6a69;
+  --line: #d3d8d2;
+  --accent: #1d5c86;
+  --accent-soft: #dce8f0;
+  --holz: #dcc196;
+  --holz-hell: #ead8b6;
+  --holz-kante: #8f6f42;
+  --hdf: #b8a68e;
+  --bohrung: #c2410c;
+  --fehler: #b42318;
+  --warnung: #9a5b00;
+  --ok: #2c7a4b;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14181a; --surface: #1b2023; --ink: #e2e6e3; --muted: #97a19f; --line: #30383b;
+    --accent: #6eaedb; --accent-soft: #1d3342; --holz: #8c7049; --holz-hell: #6e5a3d; --holz-kante: #d1b07c;
+    --hdf: #5e5446; --bohrung: #fb8f55; --fehler: #f97066; --warnung: #f5b041; --ok: #6cc28f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14181a; --surface: #1b2023; --ink: #e2e6e3; --muted: #97a19f; --line: #30383b;
+  --accent: #6eaedb; --accent-soft: #1d3342; --holz: #8c7049; --holz-hell: #6e5a3d; --holz-kante: #d1b07c;
+  --hdf: #5e5446; --bohrung: #fb8f55; --fehler: #f97066; --warnung: #f5b041; --ok: #6cc28f;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.45; }
+.app { padding-block: 16px 32px; padding-inline: 16px; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); max-width: 1600px; margin: 0 auto; }
+@media (min-width: 1000px) { .app { grid-template-columns: 360px minmax(0, 1fr); } }
+
+header.kopf { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 20px; border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+h1 { font-family: var(--font-display); font-weight: 600; font-size: 26px; letter-spacing: 0.01em; margin: 0; text-wrap: balance; }
+.untertitel { color: var(--muted); margin: 0; flex: 1 1 280px; min-width: 0; }
+.status { display: flex; gap: 6px; flex-wrap: wrap; }
+.pill { font-family: var(--font-mono); font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.pill.ok { color: var(--ok); } .pill.fehler { color: var(--fehler); } .pill.warnung { color: var(--warnung); } .pill.neutral { color: var(--muted); }
+
+aside.leiste { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+@media (min-width: 1000px) { aside.leiste { max-height: calc(100vh - 110px); overflow-y: auto; padding-right: 6px; position: sticky; top: 16px; align-self: start; } }
+.gruppe { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.gruppe h2 { font-family: var(--font-display); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0; }
+.felder { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.feld { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.feld label { font-size: 11px; color: var(--muted); letter-spacing: 0.02em; }
+.feld.breit { grid-column: 1 / -1; }
+input, select, textarea, button { font: inherit; color: var(--ink); }
+input, select { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 5px 7px; font-family: var(--font-mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+input.ungueltig { border-color: var(--fehler); }
+button { cursor: pointer; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 6px 10px; }
+button:hover { border-color: var(--accent); color: var(--accent); }
+button.primaer { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+button.primaer:hover { filter: brightness(1.1); color: var(--surface); }
+.zeile { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.zeile > select { flex: 1 1 140px; width: auto; }
+
+details.boden { border: 1px solid var(--line); border-radius: 5px; background: var(--bg); }
+details.boden > summary { list-style: none; cursor: pointer; padding: 8px 10px; display: flex; gap: 8px; align-items: center; }
+details.boden > summary::-webkit-details-marker { display: none; }
+details.boden > summary::before { content: "▸"; color: var(--muted); font-size: 11px; transition: transform .15s; }
+details.boden[open] > summary::before { transform: rotate(90deg); }
+.farbe { width: 10px; height: 10px; border-radius: 2px; flex: none; border: 1px solid var(--holz-kante); }
+.boden-titel { font-weight: 600; }
+.boden-info { color: var(--muted); font-size: 12px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.boden-markierung { font-family: var(--font-mono); font-size: 11px; }
+.boden-inhalt { padding: 0 10px 10px; display: flex; flex-direction: column; gap: 8px; }
+.entfernen { align-self: flex-start; font-size: 12px; padding: 3px 8px; color: var(--fehler); }
+
+main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.ansichten { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 760px) { .ansichten { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); } }
+figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+figcaption { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-family: var(--font-display); font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+figcaption span:last-child { font-family: var(--font-mono); text-transform: none; letter-spacing: 0; }
+svg.zeichnung { width: 100%; height: auto; max-height: 72vh; display: block; }
+svg.zeichnung text { font-family: var(--font-mono); fill: var(--ink); }
+svg .teil { cursor: pointer; }
+svg .teil:hover rect, svg .teil.aktiv rect { stroke: var(--accent); stroke-width: 2.5; }
+.legende { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); }
+.legende span { display: inline-flex; align-items: center; gap: 5px; }
+
+.teilansicht { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+.teilauswahl { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.teilauswahl select { width: auto; flex: 1 1 0; min-width: 0; }
+#svg-teil { max-height: 440px; }
+
+.reiter { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; min-width: 0; }
+.reiter-leiste { display: flex; gap: 2px; border-bottom: 1px solid var(--line); padding: 6px 6px 0; overflow-x: auto; }
+.reiter-leiste button { border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 8px 12px; color: var(--muted); font-family: var(--font-display); font-weight: 500; font-size: 14px; white-space: nowrap; }
+.reiter-leiste button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.reiter-inhalt { padding: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.tabelle { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--font-display); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); white-space: nowrap; }
+td.zahl, th.zahl { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.mono { font-family: var(--font-mono); font-size: 12px; }
+.meldung { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 4px 10px; align-items: baseline; padding: 8px 10px; border-left: 3px solid var(--line); background: var(--bg); border-radius: 0 4px 4px 0; }
+.meldung.fehler { border-left-color: var(--fehler); } .meldung.warnung { border-left-color: var(--warnung); }
+.meldung code { font-family: var(--font-mono); font-size: 12px; }
+.leer { color: var(--muted); }
+textarea { width: 100%; min-height: 260px; font-family: var(--font-mono); font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 8px; }
+pre { margin: 0; max-height: 420px; overflow: auto; font-family: var(--font-mono); font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 8px; }
+.hinweis { color: var(--muted); font-size: 12px; margin: 0; }
+.rueckmeldung { color: var(--ok); font-size: 12px; min-height: 1em; }
+.fehlertext { color: var(--fehler); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="app">
+  <header class="kopf">
+    <h1>Korpus-Bodenplaner</h1>
+    <p class="untertitel">Parametrische Böden: Fächer, Lochraster, Verbindungen und CNC-Daten berechnen sich live aus dem Korpus.</p>
+    <div class="status" id="status" aria-live="polite"></div>
+  </header>
+
+  <aside class="leiste">
+    <section class="gruppe">
+      <h2>Korpus</h2>
+      <div class="felder" id="korpus-felder"></div>
+      <h2>Rückwand</h2>
+      <div class="felder" id="rueckwand-felder"></div>
+      <h2>Sockel</h2>
+      <div class="felder" id="sockel-felder"></div>
+    </section>
+    <section class="gruppe">
+      <h2>Böden</h2>
+      <div id="boden-liste" class="felder" style="grid-template-columns: minmax(0,1fr)"></div>
+      <div class="zeile">
+        <select id="neu-typ" aria-label="Bodentyp zum Hinzufügen"></select>
+        <button id="neu-boden" class="primaer" type="button">Boden hinzufügen</button>
+      </div>
+      <div class="zeile">
+        <button id="vorlage" type="button">Beispielschrank laden</button>
+        <button id="leer" type="button">Nur Ober-/Unterboden</button>
+      </div>
+    </section>
+  </aside>
+
+  <main>
+    <div class="ansichten">
+      <figure>
+        <figcaption><span>Vorderansicht</span><span id="masse-vorne"></span></figcaption>
+        <svg class="zeichnung" id="svg-vorne" role="img" aria-label="Vorderansicht des Korpus"></svg>
+        <div class="legende">
+          <span><i class="farbe" style="background:var(--holz)"></i>Konstruktionsboden</span>
+          <span><i class="farbe" style="background:var(--holz-hell)"></i>Fachboden</span>
+          <span><i class="farbe" style="background:var(--hdf)"></i>HDF / Schubkasten</span>
+          <span>Maße in mm · Klick wählt Teil</span>
+        </div>
+      </figure>
+      <figure>
+        <figcaption><span>Schnitt · Innenseite linke Seite</span><span id="masse-seite"></span></figcaption>
+        <svg class="zeichnung" id="svg-seite" role="img" aria-label="Seitenschnitt mit Bohrbild der linken Seite"></svg>
+        <div class="legende">
+          <span><i class="farbe" style="background:var(--bohrung);border-color:var(--bohrung);border-radius:50%"></i>Bohrung (Innenfläche)</span>
+          <span><i class="farbe" style="background:none;border:1.5px solid var(--accent)"></i>Nut</span>
+          <span>vorne = links</span>
+        </div>
+      </figure>
+    </div>
+
+    <figure class="teilansicht">
+      <figcaption><span>Teilzeichnung (CNC)</span><span id="masse-teil"></span></figcaption>
+      <div class="teilauswahl">
+        <label for="teil-wahl" class="hinweis">Teil</label>
+        <select id="teil-wahl"></select>
+      </div>
+      <svg class="zeichnung" id="svg-teil" role="img" aria-label="Teilzeichnung mit Bearbeitungen"></svg>
+      <p class="hinweis">Teilkoordinaten: x entlang der Länge, y entlang der Breite (y = 0 unten in der Zeichnung = vordere Kante bzw. Unterkante). Gestrichelt = Bearbeitung von der Gegenfläche.</p>
+    </figure>
+
+    <section class="reiter">
+      <div class="reiter-leiste" role="tablist" id="reiter-leiste">
+        <button role="tab" id="tab-pruefung" aria-selected="true" data-reiter="pruefung">Prüfungen</button>
+        <button role="tab" id="tab-stueck" aria-selected="false" data-reiter="stueck">Stückliste</button>
+        <button role="tab" id="tab-faecher" aria-selected="false" data-reiter="faecher">Fächer</button>
+        <button role="tab" id="tab-cnc" aria-selected="false" data-reiter="cnc">CNC-Bearbeitungen</button>
+        <button role="tab" id="tab-json" aria-selected="false" data-reiter="json">JSON</button>
+      </div>
+      <div class="reiter-inhalt" id="reiter-inhalt"></div>
+    </section>
+  </main>
+</div>
+
+<script type="module" src="vorschau.js"></script>
