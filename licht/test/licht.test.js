@@ -21,7 +21,7 @@ const codes = (e) => e.pruefungen.map((p) => p.code);
 const ops = (e, filter) => e.bearbeitungen.filter((b) => Object.entries(filter).every(([k, v]) => b[k] === v));
 const nah = (a, b, tol = 1e-6) => Math.abs(a - b) <= tol * Math.max(1, Math.abs(b));
 
-const PROFIL_MB = { id: 'led', typ: 'ledProfil', profil: 'einbau', befestigung: { teil: 'mb', flaeche: 'unten', abstandVorne: 40, rand: 20 } };
+const PROFIL_MB = { id: 'led', typ: 'ledProfil', profil: 'einbau', befestigung: { teil: 'mb', flaeche: 'unten', abstandVorne: 60, rand: 20 } };
 const SPOTS_OB = { id: 'sp', typ: 'spot', modell: 'moebelspot58', befestigung: { teil: 'ob', flaeche: 'unten', anzahl: 3, abstandVorne: 100 } };
 
 describe('Photometrie-Grundlagen', () => {
@@ -74,7 +74,7 @@ describe('LED-Profil', () => {
     assert.equal(l.streifenLaenge, 700); // ⌊(722 − 10) / 50⌋ · 50
     assert.ok(nah(l.watt, 6.72));
     assert.ok(nah(l.lumen, 560)); // 0,7 m · 1000 lm/m · 0,8 (opaler Diffusor)
-    assert.deepEqual(l.position, { x: 400, y: 40, z: 990.5 });
+    assert.deepEqual(l.position, { x: 400, y: 60, z: 990.5 });
     assert.deepEqual(l.richtung, { x: 0, y: 0, z: -1 });
     assert.deepEqual(e.netzteile.map((n) => [n.spannung, n.nennW, n.anzahl]), [[24, 15, 1]]);
     assert.deepEqual(codes(e), []);
@@ -83,12 +83,12 @@ describe('LED-Profil', () => {
   test('Einbauprofil: Nut über die Profillänge, Kabelnut zur Hinterkante', () => {
     const e = rechne([PROFIL_MB]);
     const [nut, kabel] = ops(e, { teil: 'mb', art: 'nut' });
-    assert.deepEqual(nut.von, { x: 20, y: 40, z: 0 });
-    assert.deepEqual(nut.bis, { x: 742, y: 40, z: 0 });
+    assert.deepEqual(nut.von, { x: 20, y: 60, z: 0 });
+    assert.deepEqual(nut.bis, { x: 742, y: 60, z: 0 });
     assert.equal(nut.breite, PROFILE.einbau.nutBreite);
     assert.equal(nut.tiefe, PROFILE.einbau.nutTiefe);
     assert.equal(nut.richtung, '+z');
-    assert.deepEqual(kabel.von, { x: 727, y: 40, z: 0 });
+    assert.deepEqual(kabel.von, { x: 727, y: 60, z: 0 });
     assert.deepEqual(kabel.bis, { x: 727, y: 542, z: 0 });
     assert.equal(kabel.breite, 8);
     assert.ok(e.bearbeitungen.every((b) => b.verbindung === 'licht' && b.quelle === 'led'));
@@ -108,6 +108,12 @@ describe('LED-Profil', () => {
     assert.deepEqual(l.richtung, { x: 1, y: 0, z: 0 });
     assert.equal(l.position.x, 19);
     assert.equal(l.laenge, 1900);
+  });
+
+  test('Nut am Bodenende trifft die Dübelbohrung → Kollision', () => {
+    // Dübel im Mittelboden bei y = 32 (Ø 8, von der Stirn 25 mm tief); Nut bei y = 40 ± 9 reicht bis x = 20
+    const e = rechne([{ ...PROFIL_MB, befestigung: { ...PROFIL_MB.befestigung, abstandVorne: 40 } }]);
+    assert.ok(codes(e).includes('KOLLISION_BEARBEITUNG'));
   });
 
   test('Restwand: zu tiefe Profilnut', () => {
