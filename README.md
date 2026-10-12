@@ -1,6 +1,6 @@
 # Parametrische Möbelvorlage – Boden-Modul
 
-> Im Ordner [`parkett/`](parkett/README.md) liegt der **Parkett-Verlegeplaner** (Bodenbelag): Parkettarten, Verlegemuster, Bedarf und Material mit Live-Vorschau.
+> Im Ordner [`bodenbelag/`](bodenbelag/README.md) liegt der **Parkett- und Fliesenplaner**: Parkett- und Fliesenarten, Verlegemuster, Bedarf und Material mit Live-Vorschau.
 
 Eigenständiges Paket (`@moebelvorlage/boden`) für die Boden-Logik eines Korpus. Es ist von MS Woodwork
 getrennt. Die spätere Integration läuft ausschließlich über die öffentliche API in `src/index.js`.
@@ -41,7 +41,7 @@ stuecklisteAlsCSV(ergebnis);
 
 ```bash
 npm test          # Unit-Tests (node:test, keine Abhängigkeiten)
-npm run vorschau  # Vorschauen: http://localhost:5173 (Möbelböden), /parkett/vorschau.html (Parkett)
+npm run vorschau  # Vorschauen: http://localhost:5173 (Möbelböden), /bodenbelag/vorschau.html (Parkett und Fliesen)
 ```
 
 Benötigt Node.js ≥ 18. Das Paket hat keine Laufzeit-Abhängigkeiten und läuft unverändert im Browser.

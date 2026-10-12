@@ -1,5 +1,5 @@
 // Mini-Webserver für die lokalen Vorschauen: npm run vorschau → http://localhost:5173 (Möbelböden)
-// und http://localhost:5173/parkett/vorschau.html (Parkett)
+// und http://localhost:5173/bodenbelag/vorschau.html (Parkett und Fliesen)
 // vorschau.html enthält nur den Seiteninhalt; hier wird das HTML-Grundgerüst ergänzt.
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';

@@ -1,4 +1,4 @@
-<title>Parkett-Verlegeplaner</title>
+<title>Parkett- und Fliesenplaner</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
@@ -33,6 +33,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.45; }
 .app { max-width: 1560px; margin: 0 auto; padding-block: 18px 36px; padding-inline: 16px; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 1020px) { .app { grid-template-columns: 350px minmax(0, 1fr); } }
@@ -44,6 +45,7 @@ header p { margin: 0; color: var(--muted); flex: 1 1 300px; min-width: 0; }
 .pill.ok { color: var(--accent); } .pill.fehler { color: var(--fehler); } .pill.warnung { color: var(--warnung); } .pill.hinweis { color: var(--hinweis); }
 
 aside { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+aside > * { flex-shrink: 0; }
 @media (min-width: 1020px) { aside { position: sticky; top: 16px; align-self: start; max-height: calc(100vh - 120px); overflow-y: auto; padding-right: 6px; } }
 .block { background: var(--flaeche); border: 1px solid var(--line); border-radius: 4px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
 .block h2 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
@@ -106,32 +108,44 @@ tr.aktiv td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .meldung code { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
 pre { margin: 0; max-height: 420px; overflow: auto; font-family: var(--font-mono); font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 3px; padding: 8px; }
 .leise { color: var(--muted); font-size: 13px; margin: 0; }
+.belag-wahl { display: flex; border: 2px solid var(--wand); border-radius: 4px; overflow: hidden; }
+.belag-wahl button { flex: 1; border: none; border-radius: 0; padding: 9px 6px; font-family: var(--font-display); font-weight: 700; font-size: 18px; letter-spacing: 0.06em; text-transform: uppercase; background: var(--flaeche); }
+.belag-wahl button + button { border-left: 2px solid var(--wand); }
+.belag-wahl button[aria-pressed="true"] { background: var(--wand); color: var(--flaeche); }
+.kennwerte { display: flex; flex-wrap: wrap; gap: 4px; }
+.kennwerte span { font-family: var(--font-mono); font-size: 11px; padding: 2px 6px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 
 <div class="app">
   <header>
-    <h1>Parkett-Verlegeplaner</h1>
-    <p>Parkettart, Muster und Raum wählen: Verlegeplan, Verschnitt, Pakete und Material rechnen live mit.</p>
+    <h1>Parkett- und Fliesenplaner</h1>
+    <p>Belag, Muster und Raum wählen: Verlegeplan, Verschnitt, Bestellmenge und Material rechnen live mit.</p>
     <div class="status" id="status" aria-live="polite"></div>
   </header>
 
   <aside>
+    <div class="belag-wahl" role="group" aria-label="Belag">
+      <button type="button" id="belag-parkett" data-belag="parkett">Parkett</button>
+      <button type="button" id="belag-fliesen" data-belag="fliesen">Fliesen</button>
+    </div>
+
     <section class="block">
       <h2>Raum</h2>
       <div class="felder">
         <div class="feld"><label for="r-laenge">Länge (mm)</label><input id="r-laenge" inputmode="decimal"></div>
         <div class="feld"><label for="r-breite">Breite (mm)</label><input id="r-breite" inputmode="decimal"></div>
+        <div class="feld breit nur-fliesen"><label for="r-raumtyp">Raumtyp</label><select id="r-raumtyp"></select></div>
       </div>
       <div class="legende-titel">Türen</div>
       <div class="liste" id="tueren"></div>
       <button type="button" id="tuer-neu">Tür hinzufügen</button>
-      <div class="legende-titel">Aussparungen (Kamin, Pfeiler, Einbauten)</div>
+      <div class="legende-titel">Aussparungen (Kamin, Wanne, Pfeiler, Einbauten)</div>
       <div class="liste" id="aussparungen"></div>
       <button type="button" id="aussparung-neu">Aussparung hinzufügen</button>
     </section>
 
-    <section class="block">
+    <section class="block nur-parkett">
       <h2>Parkett</h2>
       <div class="feld breit"><label for="p-art">Parkettart</label><select id="p-art"></select></div>
       <p class="beschreibung" id="p-beschreibung"></p>
@@ -149,6 +163,27 @@ pre { margin: 0; max-height: 420px; overflow: auto; font-family: var(--font-mono
       </div>
     </section>
 
+    <section class="block nur-fliesen">
+      <h2>Fliese</h2>
+      <div class="feld breit"><label for="f-art">Fliesenart</label><select id="f-art"></select></div>
+      <p class="beschreibung" id="f-beschreibung"></p>
+      <div class="kennwerte" id="f-kennwerte"></div>
+      <div class="feld breit"><label for="f-format">Format</label><select id="f-format"></select></div>
+      <div class="felder">
+        <div class="feld"><label for="f-laenge">Länge</label><input id="f-laenge" inputmode="decimal"></div>
+        <div class="feld"><label for="f-breite">Breite</label><input id="f-breite" inputmode="decimal"></div>
+        <div class="feld"><label for="f-staerke">Stärke</label><input id="f-staerke" inputmode="decimal"></div>
+      </div>
+      <div class="legende-titel">Optik</div>
+      <div class="holz" id="optiken"></div>
+      <div class="felder">
+        <div class="feld"><label for="f-rutsch">Rutschhemmung</label><select id="f-rutsch"></select></div>
+        <div class="feld"><label for="f-pei">Abriebklasse</label><select id="f-pei"></select></div>
+        <div class="feld"><label for="f-karton">Stück je Karton</label><input id="f-karton" inputmode="numeric"></div>
+        <div class="feld"><label for="f-preis">€ je m²</label><input id="f-preis" inputmode="decimal" placeholder="optional"></div>
+      </div>
+    </section>
+
     <section class="block">
       <h2>Verlegung</h2>
       <div class="feld breit"><label for="v-muster">Muster</label><select id="v-muster"></select></div>
@@ -157,9 +192,17 @@ pre { margin: 0; max-height: 420px; overflow: auto; font-family: var(--font-mono
       <div class="segment" id="v-drehung" role="group" aria-label="Verlegerichtung">
         <button type="button" data-wert="0">0°</button><button type="button" data-wert="45">45° diagonal</button><button type="button" data-wert="90">90°</button>
       </div>
-      <div class="felder">
+      <div class="felder nur-parkett">
         <div class="feld breit"><label for="v-art">Verlegeart</label><select id="v-art"></select></div>
         <div class="feld"><label for="v-rand">Randabstand</label><input id="v-rand" inputmode="decimal" placeholder="auto"></div>
+      </div>
+      <div class="felder nur-fliesen">
+        <div class="feld"><label for="v-fuge">Fugenbreite</label><input id="v-fuge" inputmode="decimal"></div>
+        <div class="feld"><label for="v-fugenfarbe">Fugenfarbe</label><select id="v-fugenfarbe"></select></div>
+        <div class="feld"><label for="v-randfuge">Randfuge</label><input id="v-randfuge" inputmode="decimal"></div>
+        <div class="feld"><label for="v-zahnung">Zahnung</label><input id="v-zahnung" inputmode="decimal" placeholder="auto"></div>
+      </div>
+      <div class="felder">
         <div class="feld"><label for="v-start">Startwert</label><input id="v-start" inputmode="numeric"></div>
       </div>
       <button type="button" id="mischen">Wilden Verband neu mischen</button>
@@ -173,10 +216,9 @@ pre { margin: 0; max-height: 420px; overflow: auto; font-family: var(--font-mono
       <svg id="grundriss" role="img" aria-label="Verlegeplan des Raums"></svg>
       <div class="legende">
         <span><i style="background:var(--wand)"></i>Wand</span>
-        <span><i style="border:1px dashed var(--muted)"></i>Randabstand (Dehnfuge)</span>
+        <span><i style="border:1px dashed var(--muted)"></i>Rand-/Dehnfuge</span>
         <span><i style="background:repeating-linear-gradient(45deg,var(--muted) 0 2px,transparent 2px 5px)"></i>Aussparung</span>
-        <span><i style="border:2px solid var(--fehler)"></i>Zuschnitt (ein-/ausblendbar)</span>
-        <label><input type="checkbox" id="zeige-zuschnitt" style="width:auto;vertical-align:-2px"> Zuschnitte markieren</label>
+        <label><input type="checkbox" id="zeige-zuschnitt" style="width:auto;vertical-align:-2px"> Zuschnitte rot markieren</label>
       </div>
     </section>
 
@@ -186,7 +228,7 @@ pre { margin: 0; max-height: 420px; overflow: auto; font-family: var(--font-mono
       <div class="reiter-leiste" role="tablist" id="reiter">
         <button role="tab" id="tab-material" data-reiter="material" aria-selected="true">Materialliste</button>
         <button role="tab" id="tab-pruefung" data-reiter="pruefung" aria-selected="false">Prüfungen</button>
-        <button role="tab" id="tab-arten" data-reiter="arten" aria-selected="false">Parkettarten</button>
+        <button role="tab" id="tab-arten" data-reiter="arten" aria-selected="false">Belagarten</button>
         <button role="tab" id="tab-muster" data-reiter="muster" aria-selected="false">Verlegemuster</button>
         <button role="tab" id="tab-json" data-reiter="json" aria-selected="false">JSON</button>
       </div>

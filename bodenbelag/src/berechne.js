@@ -3,8 +3,7 @@
 import {
   PARKETTARTEN, MUSTER, VERLEGEARTEN, HOLZARTEN, SORTIERUNGEN, DIAGONAL_ZUSCHLAG,
 } from './katalog.js';
-import { GENERATOREN, stabFlaeche } from './muster.js';
-import { flaeche, drehe, rechteck, huelle, schneideZu, mischeWert } from './geometrie.js';
+import { verlegeflaeche, erzeugePlan, benoetigteTeile, schmaleRandreihe } from './plan.js';
 
 export const SCHEMA_VERSION = '1.0.0';
 export const MAX_RAUMLAENGE_SCHWIMMEND = 10000; // mm, Richtwert ohne Bewegungsfuge
@@ -14,6 +13,8 @@ const EPS = 1e-6;
 
 const r1 = (v) => Math.round(v * 10) / 10 || 0;
 const r2 = (v) => Math.round(v * 100) / 100 || 0;
+const de1 = (v) => String(r1(v)).replace('.', ',');
+const de2 = (v) => String(r2(v)).replace('.', ',');
 
 function zahl(v, name, { positiv = true } = {}) {
   if (typeof v !== 'number' || !Number.isFinite(v) || (positiv && v <= 0)) {
@@ -77,37 +78,6 @@ export function normalisiere(eingabe) {
   return { raum, parkett, verlegung };
 }
 
-/** Verlegeplan: Stäbe im Raum, zugeschnitten auf die Verlegefläche (Raum minus Randabstand). */
-function verlegeplan(e, familie, feld) {
-  const { parkett: p, verlegung: v } = e;
-  const gen = GENERATOREN[familie];
-  const winkel = gen.grunddrehung + v.drehung;
-  // Musterursprung = Ecke der Verlegefläche (erste Reihe liegt an der Wandfuge), gedreht um die Feldmitte
-  const [ox, oy] = [feld.x0, feld.y0];
-  const mitte = [(feld.x1 - feld.x0) / 2, (feld.y1 - feld.y0) / 2];
-  const bbox = huelle(drehe(rechteck(0, 0, feld.x1 - ox, feld.y1 - oy), -winkel, mitte));
-  const muster = MUSTER[v.muster];
-  const roh = gen.erzeuge(bbox, {
-    laenge: p.laenge, breite: p.breite, versatz: muster.versatz ?? null, startwert: v.startwert,
-  });
-  const voll = stabFlaeche(familie, p.laenge, p.breite);
-  const sortierung = SORTIERUNGEN[p.sortierung] ?? SORTIERUNGEN.natur;
-  const staebe = [];
-  for (const s of roh) {
-    const gedreht = drehe(s.punkte, winkel, mitte).map(([x, y]) => [x + ox, y + oy]);
-    const zu = schneideZu(gedreht, feld);
-    if (zu.length < 3) continue;
-    const a = flaeche(zu);
-    if (a < 1) continue; // Splitter < 1 mm² ignorieren
-    const ganz = a >= voll * (1 - 1e-6) - 0.5;
-    // Farbton je Stab (−1…1) × Streuung der Sortierung – für die Vorschau
-    const h = mischeWert(...s.punkte.flat(), v.startwert);
-    const ton = ((h % 2001) / 1000 - 1) * sortierung.streuung;
-    staebe.push({ punkte: zu.map(([x, y]) => [r1(x), r1(y)]), flaeche: a, ganz, ton: Math.round(ton * 1000) / 1000 || 0, seite: s.seite ?? null });
-  }
-  return { staebe, voll };
-}
-
 export function berechneParkett(eingabe) {
   const e = normalisiere(eingabe);
   const { raum, parkett: p, verlegung: v } = e;
@@ -136,8 +106,6 @@ export function berechneParkett(eingabe) {
 
   // Flächen
   const rand = v.randabstand;
-  const feld = { x0: rand, y0: rand, x1: raum.laenge - rand, y1: raum.breite - rand };
-  if (feld.x1 - feld.x0 <= 0 || feld.y1 - feld.y0 <= 0) throw new TypeError('Raum ist kleiner als der doppelte Randabstand');
   const empfohlen = empfohlenerRandabstand(v.art, raum.laenge, raum.breite);
   if (rand < empfohlen - EPS) melde('warnung', 'RANDABSTAND_KLEIN', `Randabstand ${rand} mm < empfohlen ${empfohlen} mm (Holz arbeitet; Herstellerangabe prüfen)`);
   if (v.art === 'schwimmend' && Math.max(raum.laenge, raum.breite) > MAX_RAUMLAENGE_SCHWIMMEND) {
@@ -147,71 +115,30 @@ export function berechneParkett(eingabe) {
     melde('hinweis', 'TUERFUGE', `Schwimmend: an ${raum.tueren.length === 1 ? 'der Tür' : `allen ${raum.tueren.length} Türen`} Trennfuge mit Übergangsprofil setzen`);
   }
 
-  const raumFlaeche = raum.laenge * raum.breite;
-  let aussparungFlaeche = 0;
-  let aussparungFeld = 0;
-  const loecher = [];
-  for (const a of raum.aussparungen) {
-    if (a.x < 0 || a.y < 0 || a.x + a.laenge > raum.laenge + EPS || a.y + a.breite > raum.breite + EPS) {
-      melde('fehler', 'AUSSPARUNG_AUSSERHALB', `${a.name} liegt außerhalb des Raums`);
-      continue;
-    }
-    aussparungFlaeche += a.laenge * a.breite;
-    // Um die Aussparung herum gilt ebenfalls der Randabstand
-    const loch = { x0: Math.max(feld.x0, a.x - rand), y0: Math.max(feld.y0, a.y - rand), x1: Math.min(feld.x1, a.x + a.laenge + rand), y1: Math.min(feld.y1, a.y + a.breite + rand) };
-    if (loch.x1 > loch.x0 && loch.y1 > loch.y0) {
-      aussparungFeld += (loch.x1 - loch.x0) * (loch.y1 - loch.y0);
-      loecher.push(loch);
-    }
-  }
-  const verlegeflaeche = (feld.x1 - feld.x0) * (feld.y1 - feld.y0) - aussparungFeld;
+  const vf = verlegeflaeche(raum, rand, melde);
+  const { feld, raumFlaeche, aussparungFlaeche } = vf;
+  const flaecheNetto = vf.netto;
 
   // Verlegeplan
-  let plan = { staebe: [], voll: p.laenge * p.breite };
   const familie = muster?.familie;
-  if (familie) plan = verlegeplan(e, familie, feld);
-  const staebe = [];
-  for (const s of plan.staebe) {
-    let rest = s.flaeche;
-    for (const loch of loecher) rest -= flaeche(schneideZu(s.punkte, loch));
-    if (rest < 1) continue; // liegt vollständig in einer Aussparung
-    const zugeschnitten = !s.ganz || rest < s.flaeche - 1;
-    staebe.push({ ...s, flaeche: r1(rest), ganz: !zugeschnitten });
-  }
+  const sortierung = SORTIERUNGEN[p.sortierung] ?? SORTIERUNGEN.natur;
+  const plan = familie
+    ? erzeugePlan({ feld, loecher: vf.loecher, familie, laenge: p.laenge, breite: p.breite, versatz: muster.versatz ?? null, drehung: v.drehung, startwert: v.startwert, streuung: sortierung.streuung })
+    : { teile: [], voll: p.laenge * p.breite };
+  const staebe = plan.teile;
   const ganze = staebe.filter((s) => s.ganz).length;
   const zuschnitte = staebe.length - ganze;
-  // Restverwertung (Verband parallel zur Wand): Zuschnitte per First-Fit-Decreasing aus ganzen Stäben schneiden
-  let staebeBenoetigt = staebe.length;
-  if (familie === 'verband' && Math.abs(v.drehung % 90) < EPS) {
-    const laengs = Math.abs(v.drehung % 180) < EPS ? 0 : 1;
-    const stuecke = staebe.filter((s) => !s.ganz).map((s) => {
-      const w = s.punkte.map((pt) => pt[laengs]);
-      return Math.max(...w) - Math.min(...w) + SAEGESCHNITT;
-    }).sort((a, b) => b - a);
-    const reste = [];
-    for (const l of stuecke) {
-      const i = reste.findIndex((r) => r >= l);
-      if (i >= 0) reste[i] -= l; else reste.push(p.laenge - l);
-    }
-    staebeBenoetigt = ganze + reste.length;
-  }
-  const planFlaeche = staebeBenoetigt * plan.voll;
-  const geometrisch = verlegeflaeche > 0 ? (planFlaeche - verlegeflaeche) / verlegeflaeche : 0;
+  const staebeBenoetigt = benoetigteTeile(staebe, { familie, drehung: v.drehung, laenge: p.laenge, schnitt: SAEGESCHNITT });
+  const geometrisch = flaecheNetto > 0 ? (staebeBenoetigt * plan.voll - flaecheNetto) / flaecheNetto : 0;
 
-  // Schmale Randreihe beim Verband (nur parallel zur Wand)
-  if (familie === 'verband' && Math.abs(v.drehung % 90) < EPS) {
-    const quer = Math.abs(v.drehung % 180) < EPS ? feld.y1 - feld.y0 : feld.x1 - feld.x0;
-    const reste = quer % p.breite;
-    if (reste > 0.5 && reste < p.breite / 3) {
-      melde('warnung', 'SCHMALE_RANDREIHE', `Letzte Reihe nur ${r1(reste)} mm breit: erste und letzte Reihe auf je ${r1((reste + p.breite) / 2)} mm besäumen`);
-    }
-  }
+  const schmal = schmaleRandreihe(feld, { familie, drehung: v.drehung, breite: p.breite });
+  if (schmal) melde('warnung', 'SCHMALE_RANDREIHE', `Letzte Reihe nur ${schmal.rest} mm breit: erste und letzte Reihe auf je ${schmal.besaeumt} mm besäumen`);
 
   // Bedarf
   const diagonal = Math.abs(((v.drehung % 90) + 90) % 90) > EPS;
   const richtwert = (muster?.verschnitt ?? 10) + (diagonal ? DIAGONAL_ZUSCHLAG : 0);
   // Beim Verband ist der Plan mit Restverwertung belastbar: bestellt wird der höhere Wert
-  const nachRichtwert = (verlegeflaeche / 1e6) * (1 + richtwert / 100);
+  const nachRichtwert = (flaecheNetto / 1e6) * (1 + richtwert / 100);
   const nachPlan = familie === 'verband' ? (staebeBenoetigt * plan.voll) / 1e6 : 0;
   const bedarfM2 = Math.max(nachRichtwert, nachPlan);
   if (nachPlan > nachRichtwert + EPS) {
@@ -220,16 +147,16 @@ export function berechneParkett(eingabe) {
   const pakete = Math.ceil(bedarfM2 / p.paketInhalt - 1e-9);
   const bestellM2 = pakete * p.paketInhalt;
   const stabM2 = plan.voll / 1e6;
-  const nettoM2 = verlegeflaeche / 1e6;
+  const nettoM2 = flaecheNetto / 1e6;
 
   // Material
   const material = [{
     position: `${art?.name ?? p.art}, ${HOLZARTEN[p.holzart]?.name ?? p.holzart}, ${SORTIERUNGEN[p.sortierung]?.name ?? p.sortierung}`,
-    menge: pakete, einheit: 'Pakete', detail: `${r2(bestellM2)} m² à ${p.paketInhalt} m²/Paket · ca. ${Math.ceil(bestellM2 / stabM2)} ${familie === 'tafel' ? 'Tafeln' : 'Stäbe'} ${p.laenge} × ${p.breite} × ${p.staerke} mm`,
+    menge: pakete, einheit: 'Pakete', detail: `${de2(bestellM2)} m² à ${de2(p.paketInhalt)} m²/Paket · ca. ${Math.ceil(bestellM2 / stabM2)} ${familie === 'tafel' ? 'Tafeln' : 'Stäbe'} ${p.laenge} × ${p.breite} × ${p.staerke} mm`,
   }];
   const umfang = 2 * (raum.laenge + raum.breite) - raum.tueren.reduce((s, t) => s + t.breite, 0);
   const leistenM = (umfang / 1000) * 1.05;
-  material.push({ position: 'Sockelleiste', menge: Math.ceil((leistenM * 1000) / LEISTENLAENGE), einheit: 'Stück', detail: `${r2(leistenM)} m inkl. 5 % Verschnitt, à ${LEISTENLAENGE / 1000} m` });
+  material.push({ position: 'Sockelleiste', menge: Math.ceil((leistenM * 1000) / LEISTENLAENGE), einheit: 'Stück', detail: `${de2(leistenM)} m inkl. 5 % Verschnitt, à ${LEISTENLAENGE / 1000} m` });
   if (raum.tueren.length) material.push({ position: 'Übergangsprofil', menge: raum.tueren.length, einheit: 'Stück', detail: `je Tür, ${raum.tueren.map((t) => t.breite).join(' / ')} mm` });
   if (v.art === 'schwimmend') {
     material.push({ position: 'Trittschalldämmung', menge: r2(nettoM2 * 1.05), einheit: 'm²', detail: 'inkl. 5 % Verschnitt' });
