@@ -77,7 +77,7 @@ describe('Prüfungen', () => {
   });
 
   test('Restwand: Nut zu tief', () => {
-    const e = rechne([UB, OB, { ...MB, einbauart: 'eingenutet', verbindung: 'nut_feder', nuttiefe: 16 }]);
+    const e = rechne([UB, OB, { ...MB, einbauart: 'eingenutet', verbindung: 'nut_feder', nuttiefe: 17 }]);
     assert.ok(fehlercodes(e).includes('RESTWAND'));
   });
 
