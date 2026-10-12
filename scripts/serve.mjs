@@ -1,4 +1,5 @@
-// Mini-Webserver für die lokale Live-Vorschau: npm run vorschau → http://localhost:5173
+// Mini-Webserver für die lokalen Vorschauen: npm run vorschau → http://localhost:5173 (Möbelböden)
+// und http://localhost:5173/parkett/vorschau.html (Parkett)
 // vorschau.html enthält nur den Seiteninhalt; hier wird das HTML-Grundgerüst ergänzt.
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -15,7 +16,7 @@ createServer(async (req, res) => {
   if (datei.startsWith('..')) { res.writeHead(403).end(); return; }
   try {
     let inhalt = await readFile(join(wurzel, datei));
-    if (datei === 'vorschau.html') {
+    if (datei.endsWith('.html')) {
       inhalt = `<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"></head><body>${inhalt}</body></html>`;
     }
     res.writeHead(200, { 'content-type': TYPEN[extname(datei)] ?? 'application/octet-stream' }).end(inhalt);

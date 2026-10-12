@@ -1,0 +1,198 @@
+<title>Parkett-Verlegeplaner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: Musterbrett-Werkstatt – links Konfiguration, rechts großer Grundriss mit Stäben, darunter Kennzahlen und Listen */
+:root {
+  --bg: #eceeec;
+  --flaeche: #f8f9f7;
+  --ink: #1f2422;
+  --muted: #616a66;
+  --line: #d0d5d1;
+  --wand: #3a403d;
+  --accent: #2f6b55;
+  --accent-ink: #f8f9f7;
+  --fehler: #b42318;
+  --warnung: #8f5a00;
+  --hinweis: #2d5f8a;
+  --font-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161a19; --flaeche: #1e2321; --ink: #e3e7e4; --muted: #9aa49f; --line: #333a37; --wand: #c9d0cc;
+    --accent: #6fbf9f; --accent-ink: #10201a; --fehler: #f97066; --warnung: #f2b347; --hinweis: #7ab3e0;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161a19; --flaeche: #1e2321; --ink: #e3e7e4; --muted: #9aa49f; --line: #333a37; --wand: #c9d0cc;
+  --accent: #6fbf9f; --accent-ink: #10201a; --fehler: #f97066; --warnung: #f2b347; --hinweis: #7ab3e0;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.45; }
+.app { max-width: 1560px; margin: 0 auto; padding-block: 18px 36px; padding-inline: 16px; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1020px) { .app { grid-template-columns: 350px minmax(0, 1fr); } }
+header { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 22px; align-items: baseline; padding-bottom: 12px; border-bottom: 2px solid var(--wand); }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: 32px; letter-spacing: 0.01em; margin: 0; text-transform: uppercase; }
+header p { margin: 0; color: var(--muted); flex: 1 1 300px; min-width: 0; }
+.status { display: flex; gap: 6px; flex-wrap: wrap; }
+.pill { font-family: var(--font-mono); font-size: 12px; border: 1px solid currentColor; border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+.pill.ok { color: var(--accent); } .pill.fehler { color: var(--fehler); } .pill.warnung { color: var(--warnung); } .pill.hinweis { color: var(--hinweis); }
+
+aside { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+@media (min-width: 1020px) { aside { position: sticky; top: 16px; align-self: start; max-height: calc(100vh - 120px); overflow-y: auto; padding-right: 6px; } }
+.block { background: var(--flaeche); border: 1px solid var(--line); border-radius: 4px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.block h2 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.felder { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.feld { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.feld.breit { grid-column: 1 / -1; }
+.feld label, .legende-titel { font-size: 12px; color: var(--muted); }
+input, select, button { font: inherit; color: var(--ink); }
+input, select { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 3px; padding: 5px 7px; font-family: var(--font-mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+select { font-family: var(--font-body); font-size: 14px; }
+input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+input.ungueltig { border-color: var(--fehler); }
+button { cursor: pointer; background: var(--flaeche); border: 1px solid var(--line); border-radius: 3px; padding: 6px 10px; }
+button:hover { border-color: var(--accent); color: var(--accent); }
+.segment { display: flex; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+.segment button { flex: 1; border: none; border-radius: 0; padding: 5px 4px; font-family: var(--font-mono); font-size: 13px; }
+.segment button + button { border-left: 1px solid var(--line); }
+.segment button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.beschreibung { margin: 0; font-size: 13px; color: var(--muted); }
+.holz { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.holz button { padding: 0; height: 40px; border-radius: 3px; border: 2px solid transparent; position: relative; }
+.holz button[aria-pressed="true"] { border-color: var(--ink); }
+.holz button span { position: absolute; left: 4px; bottom: 2px; font-size: 10px; color: #1f2422; background: rgba(255,255,255,.7); padding: 0 3px; border-radius: 2px; max-width: calc(100% - 8px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.liste { display: flex; flex-direction: column; gap: 6px; }
+.eintrag { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; padding: 8px; background: var(--bg); border-radius: 3px; }
+.eintrag .feld { flex: 1 1 60px; }
+.eintrag .feld.name { flex-basis: 70%; }
+.weg { color: var(--fehler); padding: 4px 8px; font-size: 12px; }
+
+main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.plan { background: var(--flaeche); border: 1px solid var(--line); border-radius: 4px; padding: 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.plan-kopf { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; font-family: var(--font-display); font-size: 15px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.plan-kopf span:last-child { font-family: var(--font-mono); font-size: 12px; text-transform: none; letter-spacing: 0; }
+#grundriss { width: 100%; height: auto; max-height: 74vh; display: block; }
+#grundriss text { font-family: var(--font-mono); fill: var(--ink); }
+.legende { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--muted); }
+.legende i { display: inline-block; width: 12px; height: 12px; vertical-align: -2px; margin-right: 5px; border-radius: 2px; }
+
+.kennzahlen { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.kz { background: var(--flaeche); border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.kz b { font-family: var(--font-display); font-weight: 600; font-size: 28px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.kz span { font-size: 12px; color: var(--muted); }
+.kz.haupt { border-color: var(--accent); }
+.kz.haupt b { color: var(--accent); }
+
+.reiter { background: var(--flaeche); border: 1px solid var(--line); border-radius: 4px; min-width: 0; }
+.reiter-leiste { display: flex; gap: 2px; padding: 6px 6px 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.reiter-leiste button { border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted); font-family: var(--font-display); font-weight: 600; font-size: 16px; letter-spacing: 0.03em; padding: 6px 12px; white-space: nowrap; }
+.reiter-leiste button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.reiter-inhalt { padding: 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.tabelle { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--font-display); font-weight: 600; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+td.zahl { text-align: right; font-family: var(--font-mono); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.klein { font-size: 13px; color: var(--muted); }
+tr.aktiv td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.meldung { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; padding: 8px 10px; border-left: 3px solid var(--line); background: var(--bg); border-radius: 0 3px 3px 0; }
+.meldung.fehler { border-left-color: var(--fehler); } .meldung.warnung { border-left-color: var(--warnung); } .meldung.hinweis { border-left-color: var(--hinweis); }
+.meldung code { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+pre { margin: 0; max-height: 420px; overflow: auto; font-family: var(--font-mono); font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 3px; padding: 8px; }
+.leise { color: var(--muted); font-size: 13px; margin: 0; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="app">
+  <header>
+    <h1>Parkett-Verlegeplaner</h1>
+    <p>Parkettart, Muster und Raum wählen: Verlegeplan, Verschnitt, Pakete und Material rechnen live mit.</p>
+    <div class="status" id="status" aria-live="polite"></div>
+  </header>
+
+  <aside>
+    <section class="block">
+      <h2>Raum</h2>
+      <div class="felder">
+        <div class="feld"><label for="r-laenge">Länge (mm)</label><input id="r-laenge" inputmode="decimal"></div>
+        <div class="feld"><label for="r-breite">Breite (mm)</label><input id="r-breite" inputmode="decimal"></div>
+      </div>
+      <div class="legende-titel">Türen</div>
+      <div class="liste" id="tueren"></div>
+      <button type="button" id="tuer-neu">Tür hinzufügen</button>
+      <div class="legende-titel">Aussparungen (Kamin, Pfeiler, Einbauten)</div>
+      <div class="liste" id="aussparungen"></div>
+      <button type="button" id="aussparung-neu">Aussparung hinzufügen</button>
+    </section>
+
+    <section class="block">
+      <h2>Parkett</h2>
+      <div class="feld breit"><label for="p-art">Parkettart</label><select id="p-art"></select></div>
+      <p class="beschreibung" id="p-beschreibung"></p>
+      <div class="felder">
+        <div class="feld"><label for="p-laenge">Länge</label><input id="p-laenge" inputmode="decimal"></div>
+        <div class="feld"><label for="p-breite">Breite</label><input id="p-breite" inputmode="decimal"></div>
+        <div class="feld"><label for="p-staerke">Stärke</label><input id="p-staerke" inputmode="decimal"></div>
+      </div>
+      <div class="legende-titel">Holzart</div>
+      <div class="holz" id="holzarten"></div>
+      <div class="felder">
+        <div class="feld breit"><label for="p-sortierung">Sortierung</label><select id="p-sortierung"></select></div>
+        <div class="feld"><label for="p-paket">m² je Paket</label><input id="p-paket" inputmode="decimal"></div>
+        <div class="feld"><label for="p-preis">€ je m²</label><input id="p-preis" inputmode="decimal" placeholder="optional"></div>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>Verlegung</h2>
+      <div class="feld breit"><label for="v-muster">Muster</label><select id="v-muster"></select></div>
+      <p class="beschreibung" id="v-beschreibung"></p>
+      <div class="legende-titel">Richtung zur Längswand</div>
+      <div class="segment" id="v-drehung" role="group" aria-label="Verlegerichtung">
+        <button type="button" data-wert="0">0°</button><button type="button" data-wert="45">45° diagonal</button><button type="button" data-wert="90">90°</button>
+      </div>
+      <div class="felder">
+        <div class="feld breit"><label for="v-art">Verlegeart</label><select id="v-art"></select></div>
+        <div class="feld"><label for="v-rand">Randabstand</label><input id="v-rand" inputmode="decimal" placeholder="auto"></div>
+        <div class="feld"><label for="v-start">Startwert</label><input id="v-start" inputmode="numeric"></div>
+      </div>
+      <button type="button" id="mischen">Wilden Verband neu mischen</button>
+      <button type="button" id="vorlage">Beispielraum laden</button>
+    </section>
+  </aside>
+
+  <main>
+    <section class="plan">
+      <div class="plan-kopf"><span>Verlegeplan · Draufsicht</span><span id="plan-info"></span></div>
+      <svg id="grundriss" role="img" aria-label="Verlegeplan des Raums"></svg>
+      <div class="legende">
+        <span><i style="background:var(--wand)"></i>Wand</span>
+        <span><i style="border:1px dashed var(--muted)"></i>Randabstand (Dehnfuge)</span>
+        <span><i style="background:repeating-linear-gradient(45deg,var(--muted) 0 2px,transparent 2px 5px)"></i>Aussparung</span>
+        <span><i style="border:2px solid var(--fehler)"></i>Zuschnitt (ein-/ausblendbar)</span>
+        <label><input type="checkbox" id="zeige-zuschnitt" style="width:auto;vertical-align:-2px"> Zuschnitte markieren</label>
+      </div>
+    </section>
+
+    <div class="kennzahlen" id="kennzahlen"></div>
+
+    <section class="reiter">
+      <div class="reiter-leiste" role="tablist" id="reiter">
+        <button role="tab" id="tab-material" data-reiter="material" aria-selected="true">Materialliste</button>
+        <button role="tab" id="tab-pruefung" data-reiter="pruefung" aria-selected="false">Prüfungen</button>
+        <button role="tab" id="tab-arten" data-reiter="arten" aria-selected="false">Parkettarten</button>
+        <button role="tab" id="tab-muster" data-reiter="muster" aria-selected="false">Verlegemuster</button>
+        <button role="tab" id="tab-json" data-reiter="json" aria-selected="false">JSON</button>
+      </div>
+      <div class="reiter-inhalt" id="reiter-inhalt"></div>
+    </section>
+  </main>
+</div>
+
+<script type="module" src="vorschau.js"></script>
