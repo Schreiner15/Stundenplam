@@ -2,6 +2,7 @@
 
 import { berechneLicht, lichtVorlage, kelvinZuRgb, PROFILE, SPOTS } from './licht/src/index.js';
 import { berechne as berechneMoebel, erstelleVorlage } from './src/index.js';
+import { Ansicht3D } from './licht-3d.js';
 
 const $ = (s) => document.querySelector(s);
 const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -15,6 +16,8 @@ let z = laden() ?? startZustand();
 let moebel = null;
 let ergebnis = null;
 let reiter = 'stueck';
+let ansicht = 'ansicht' in (z ?? {}) ? z.ansicht : '3d';
+let drei = null;
 const offen = new Set();
 
 function startZustand() {
@@ -368,9 +371,36 @@ function aktualisiere() {
   zeichneStatus();
   zeichneKennzahlen();
   zeichneVorne();
+  zeige3D();
   zeichneKarten();
   zeichneReiter();
 }
+
+function zeige3D() {
+  if (ansicht !== '3d') return;
+  try {
+    drei ??= new Ansicht3D($('#buehne'));
+    drei.zeige(moebel, ergebnis);
+  } catch (err) {
+    $('#hinweis-3d').textContent = `3D nicht verfügbar (${err.message}). Die 2D-Ansicht funktioniert weiterhin.`;
+  }
+}
+
+function setzeAnsicht(neu) {
+  ansicht = neu;
+  z.ansicht = neu;
+  speichern();
+  $('#feld-3d').hidden = neu !== '3d';
+  $('#feld-2d').hidden = neu !== '2d';
+  document.querySelectorAll('[data-ansicht]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.ansicht === neu)));
+  zeige3D();
+}
+document.querySelectorAll('[data-ansicht]').forEach((b) => b.addEventListener('click', () => setzeAnsicht(b.dataset.ansicht)));
+document.querySelectorAll('[data-kamera]').forEach((b) => b.addEventListener('click', () => drei?.kamera(b.dataset.kamera)));
+$('#belichtung').addEventListener('input', (ev) => drei?.setzeOptionen({ belichtungEV: Number(ev.target.value) }));
+$('#raumlicht').addEventListener('input', (ev) => drei?.setzeOptionen({ raumlicht: Number(ev.target.value) }));
+$('#luxkarte').addEventListener('change', (ev) => drei?.setzeOptionen({ luxKarte: ev.target.checked }));
+$('#schatten').addEventListener('change', (ev) => drei?.setzeOptionen({ schatten: ev.target.checked }));
 
 $('#m-breite').value = z.masse.breite;
 $('#m-hoehe').value = z.masse.hoehe;
@@ -381,3 +411,4 @@ offen.add(0);
 zeichneLeuchten();
 zeichnePruefliste();
 aktualisiere();
+setzeAnsicht(ansicht);
