@@ -1,0 +1,177 @@
+<title>Möbel-Lichtplaner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: Werkstatt-Lichtplan – links Leuchten, rechts Nachtansicht des Möbels mit Lichtkegeln, darunter Lux-Karten */
+:root {
+  --bg: #f1f2ef;
+  --flaeche: #fafaf8;
+  --ink: #1d2225;
+  --muted: #5f6869;
+  --line: #d2d6d1;
+  --accent: #1d5c86;
+  --nacht: #2b3033;
+  --holz: #c9ad84;
+  --holz-kante: #6f5636;
+  --fehler: #b42318;
+  --warnung: #9a5b00;
+  --hinweis: #2d5f8a;
+  --ok: #2c7a4b;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141719; --flaeche: #1b1f21; --ink: #e2e6e3; --muted: #98a2a0; --line: #30373a; --accent: #6eaedb;
+    --nacht: #0d0f10; --holz: #8a7350; --holz-kante: #cbb28a; --fehler: #f97066; --warnung: #f5b041; --hinweis: #7ab3e0; --ok: #6cc28f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141719; --flaeche: #1b1f21; --ink: #e2e6e3; --muted: #98a2a0; --line: #30373a; --accent: #6eaedb;
+  --nacht: #0d0f10; --holz: #8a7350; --holz-kante: #cbb28a; --fehler: #f97066; --warnung: #f5b041; --hinweis: #7ab3e0; --ok: #6cc28f;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.45; }
+.app { max-width: 1600px; margin: 0 auto; padding-block: 16px 32px; padding-inline: 16px; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1040px) { .app { grid-template-columns: 370px minmax(0, 1fr); } }
+header { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 20px; align-items: baseline; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+h1 { margin: 0; font-family: var(--font-display); font-weight: 700; font-size: 27px; }
+header p { margin: 0; color: var(--muted); flex: 1 1 300px; min-width: 0; }
+.status { display: flex; gap: 6px; flex-wrap: wrap; }
+.pill { font-family: var(--font-mono); font-size: 12px; padding: 2px 9px; border: 1px solid currentColor; border-radius: 999px; white-space: nowrap; }
+.pill.ok { color: var(--ok); } .pill.fehler { color: var(--fehler); } .pill.warnung { color: var(--warnung); } .pill.hinweis { color: var(--hinweis); }
+
+aside { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+aside > * { flex-shrink: 0; }
+@media (min-width: 1040px) { aside { position: sticky; top: 16px; align-self: start; max-height: calc(100vh - 110px); overflow-y: auto; padding-right: 6px; } }
+.block { background: var(--flaeche); border: 1px solid var(--line); border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.block h2 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.felder { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.feld { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.feld.breit { grid-column: 1 / -1; }
+.feld label, .klein { font-size: 11px; color: var(--muted); }
+input, select, button { font: inherit; color: var(--ink); }
+input, select { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 5px 7px; font-family: var(--font-mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+select { font-family: var(--font-body); }
+input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+input.ungueltig { border-color: var(--fehler); }
+button { cursor: pointer; background: var(--flaeche); border: 1px solid var(--line); border-radius: 4px; padding: 6px 10px; }
+button:hover { border-color: var(--accent); color: var(--accent); }
+.zeile { display: flex; gap: 6px; flex-wrap: wrap; }
+.zeile button { flex: 1 1 auto; }
+details.leuchte { border: 1px solid var(--line); border-radius: 5px; background: var(--bg); }
+details.leuchte > summary { list-style: none; cursor: pointer; padding: 8px 10px; display: flex; gap: 8px; align-items: center; }
+details.leuchte > summary::-webkit-details-marker { display: none; }
+.lampe { width: 12px; height: 12px; border-radius: 50%; flex: none; box-shadow: 0 0 0 1px var(--line); }
+.titel { font-weight: 600; }
+.info { color: var(--muted); font-size: 12px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inhalt { padding: 0 10px 10px; display: flex; flex-direction: column; gap: 8px; }
+.weg { align-self: flex-start; color: var(--fehler); font-size: 12px; padding: 3px 8px; }
+.pruef-liste { display: flex; flex-direction: column; gap: 4px; }
+.pruef-liste label { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+.pruef-liste input { width: auto; }
+
+main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.oben { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 900px) { .oben { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+figure { margin: 0; background: var(--flaeche); border: 1px solid var(--line); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+figcaption { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-family: var(--font-display); font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+figcaption span:last-child { font-family: var(--font-mono); letter-spacing: 0; text-transform: none; }
+svg { display: block; width: 100%; height: auto; }
+#vorne { max-height: 78vh; }
+svg text { font-family: var(--font-mono); }
+.karten { display: flex; flex-direction: column; gap: 14px; }
+.karte { display: flex; flex-direction: column; gap: 4px; }
+.karte-kopf { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.karte-kopf b { font-family: var(--font-display); font-size: 15px; }
+.werte { display: flex; flex-wrap: wrap; gap: 4px 12px; font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.legende { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.skala { flex: 1; height: 10px; border-radius: 2px; max-width: 280px; }
+.kennzahlen { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.kz { background: var(--flaeche); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.kz b { font-family: var(--font-display); font-size: 26px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.kz span { font-size: 12px; color: var(--muted); }
+.reiter { background: var(--flaeche); border: 1px solid var(--line); border-radius: 6px; min-width: 0; }
+.reiter-leiste { display: flex; gap: 2px; padding: 6px 6px 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.reiter-leiste button { border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted); font-family: var(--font-display); font-weight: 500; font-size: 14px; padding: 8px 12px; white-space: nowrap; }
+.reiter-leiste button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.reiter-inhalt { padding: 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.tabelle { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--font-display); font-weight: 500; font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+td.zahl { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.meldung { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; padding: 8px 10px; border-left: 3px solid var(--line); background: var(--bg); border-radius: 0 4px 4px 0; }
+.meldung.fehler { border-left-color: var(--fehler); } .meldung.warnung { border-left-color: var(--warnung); } .meldung.hinweis { border-left-color: var(--hinweis); }
+.meldung code { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+pre { margin: 0; max-height: 420px; overflow: auto; font-family: var(--font-mono); font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 8px; }
+.leise { color: var(--muted); font-size: 12px; margin: 0; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="app">
+  <header>
+    <h1>Möbel-Lichtplaner</h1>
+    <p>LED-Profile und Spots am Möbel platzieren: Lichtkegel, Beleuchtungsstärke, Bohrungen, Netzteil und Stückliste rechnen live mit.</p>
+    <div class="status" id="status" aria-live="polite"></div>
+  </header>
+
+  <aside>
+    <section class="block">
+      <h2>Möbel</h2>
+      <div class="felder">
+        <div class="feld"><label for="m-breite">Breite</label><input id="m-breite" inputmode="decimal"></div>
+        <div class="feld"><label for="m-hoehe">Höhe</label><input id="m-hoehe" inputmode="decimal"></div>
+        <div class="feld"><label for="m-tiefe">Tiefe</label><input id="m-tiefe" inputmode="decimal"></div>
+      </div>
+      <p class="leise">Beispielschrank aus dem Möbel-Modul (Sockel, Schubkästen, Fest-, Mittel- und Fachböden).</p>
+    </section>
+    <section class="block">
+      <h2>Leuchten</h2>
+      <div id="leuchten" class="felder" style="grid-template-columns:minmax(0,1fr)"></div>
+      <div class="zeile">
+        <button type="button" data-neu="ledProfil">+ LED-Profil</button>
+        <button type="button" data-neu="spot">+ Spots</button>
+        <button type="button" data-neu="punktlicht">+ Punktlicht</button>
+      </div>
+      <button type="button" id="vorlage">Beispielbeleuchtung laden</button>
+    </section>
+    <section class="block">
+      <h2>Prüfflächen</h2>
+      <div class="felder"><div class="feld"><label for="soll">Soll (lx)</label><input id="soll" inputmode="decimal"></div></div>
+      <div class="pruef-liste" id="pruefliste"></div>
+    </section>
+  </aside>
+
+  <main>
+    <div class="kennzahlen" id="kennzahlen"></div>
+    <div class="oben">
+      <figure>
+        <figcaption><span>Vorderansicht · Lichtkegel</span><span id="vorne-info"></span></figcaption>
+        <svg id="vorne" role="img" aria-label="Vorderansicht des Möbels mit Lichtkegeln"></svg>
+        <p class="leise">Kegel = Abstrahlwinkel (50 % der Spitzenlichtstärke), Farbe nach Lichtfarbe in Kelvin. Böden verdecken das Licht.</p>
+      </figure>
+      <figure>
+        <figcaption><span>Beleuchtungsstärke (Draufsicht)</span><span id="lux-info"></span></figcaption>
+        <div class="karten" id="karten"></div>
+      </figure>
+    </div>
+    <section class="reiter">
+      <div class="reiter-leiste" role="tablist" id="reiter">
+        <button role="tab" id="tab-stueck" data-reiter="stueck" aria-selected="true">Stückliste</button>
+        <button role="tab" id="tab-pruef" data-reiter="pruef" aria-selected="false">Prüfungen</button>
+        <button role="tab" id="tab-cnc" data-reiter="cnc" aria-selected="false">CNC-Bearbeitungen</button>
+        <button role="tab" id="tab-leuchten" data-reiter="leuchten" aria-selected="false">Leuchten</button>
+        <button role="tab" id="tab-render" data-reiter="render" aria-selected="false">Render-Export</button>
+      </div>
+      <div class="reiter-inhalt" id="reiter-inhalt"></div>
+    </section>
+  </main>
+</div>
+
+<script type="module" src="licht-vorschau.js"></script>

@@ -1,5 +1,7 @@
 # Parametrische Möbelvorlage – Boden-Modul
 
+> Im Ordner [`licht/`](licht/ARCHITEKTUR.md) liegt das **Lichtquellen-Modul** (LED-Profile, Spots, Lux-Berechnung, Bohrungen, Netzteil) mit Vorschau `licht-vorschau.html`.
+>
 > Im Ordner [`bodenbelag/`](bodenbelag/README.md) liegt der **Parkett- und Fliesenplaner**: Parkett- und Fliesenarten, Verlegemuster, Bedarf und Material mit Live-Vorschau.
 
 Eigenständiges Paket (`@moebelvorlage/boden`) für die Boden-Logik eines Korpus. Es ist von MS Woodwork
@@ -41,7 +43,7 @@ stuecklisteAlsCSV(ergebnis);
 
 ```bash
 npm test          # Unit-Tests (node:test, keine Abhängigkeiten)
-npm run vorschau  # Vorschauen: http://localhost:5173 (Möbelböden), /bodenbelag/vorschau.html (Parkett und Fliesen)
+npm run vorschau  # Vorschauen: http://localhost:5173 (Möbelböden), /bodenbelag/vorschau.html (Parkett und Fliesen), /licht-vorschau.html (Licht)
 ```
 
 Benötigt Node.js ≥ 18. Das Paket hat keine Laufzeit-Abhängigkeiten und läuft unverändert im Browser.
