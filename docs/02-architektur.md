@@ -252,7 +252,7 @@ Ober- und Unterboden (über die Rückwandbreite).
 | `KOLLISION_RUECKWAND` | Fehler | Boden ragt in die Rückwand |
 | `RUECKWANDNUT` | Fehler | Ober-/Unterboden zu kurz für die Rückwandnut |
 | `UEBERLAPPUNG` | Fehler | zwei Böden/Schubkästen überschneiden sich in Z |
-| `RESTWAND` | Fehler | Bohr-/Nuttiefe lässt weniger als 4 mm Restwand |
+| `RESTWAND` | Fehler | Bohr-/Nuttiefe lässt weniger als 3 mm Restwand |
 | `MASS_UNGUELTIG` | Fehler | abgeleitete Breite/Tiefe ≤ 0 |
 | `ABSCHNITT` | Fehler | Abschnitt existiert nicht / zweimal Fachböden im selben Abschnitt |
 | `RASTER` | Fehler | zu wenige Lochreihen für die Anzahl Fachböden |
