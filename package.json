@@ -1,0 +1,22 @@
+{
+  "name": "@moebelvorlage/boden",
+  "version": "1.0.0",
+  "description": "Parametrische Möbelvorlage – Boden-Logik (eigenständiges Modul, CAD-unabhängig)",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "test": "node --test test/",
+    "vorschau": "node scripts/serve.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}
