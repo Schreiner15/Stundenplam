@@ -26,7 +26,17 @@ export function kelvinZuRgb(kelvin) {
   return [k(r), k(g), k(b)];
 }
 
-/** Schneidet die Strecke a → b einen Quader? (Slab-Verfahren, Quader um 0,5 mm verkleinert) */
+/** Erstes Hindernis auf der Strecke a → b (kleinster Eintrittsparameter) oder null. */
+export function ersterTreffer(a, b, hindernisse) {
+  let best = null;
+  for (const q of hindernisse) {
+    const t = streckeTrifftQuader(a, b, q);
+    if (t !== false && (!best || t < best.t)) best = { hindernis: q, t };
+  }
+  return best;
+}
+
+/** Schneidet die Strecke a → b einen Quader? Liefert den Eintrittsparameter t oder false (Quader um 0,5 mm verkleinert). */
 function streckeTrifftQuader(a, b, q) {
   let t0 = 0;
   let t1 = 1;
@@ -46,7 +56,7 @@ function streckeTrifftQuader(a, b, q) {
     t1 = Math.min(t1, tb);
     if (t0 >= t1) return false;
   }
-  return true;
+  return t0;
 }
 
 /**
@@ -71,7 +81,7 @@ export function beleuchtungsstaerke(p, normale, strahler, hindernisse = []) {
       i *= cosGamma ** s.n;
     }
     if (i * cosBeta < 1e-9) continue;
-    if (hindernisse.some((q) => streckeTrifftQuader(s.position, p, q))) continue;
+    if (hindernisse.some((q) => streckeTrifftQuader(s.position, p, q) !== false)) continue;
     e += (i * cosBeta) / (d2 / 1e6);
   }
   return e;

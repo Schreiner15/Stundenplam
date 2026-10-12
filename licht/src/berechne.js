@@ -4,11 +4,11 @@ import {
   PROFILE, STREIFEN_STANDARD, MAX_STREIFEN_JE_EINSPEISUNG, SPOTS, NETZTEIL_GROESSEN, PROFIL_STANGE, KABEL,
   VERTEILER_ANSCHLUESSE, MIN_RANDABSTAND, MIN_RESTWAND,
 } from './katalog.js';
-import { cosExponent, spitzenLichtstaerke, innererKegel, kelvinZuRgb, beleuchtungsstaerke } from './photometrie.js';
-import { teilFlaeche, kollidiert } from './montage.js';
+import { cosExponent, spitzenLichtstaerke, innererKegel, kelvinZuRgb, beleuchtungsstaerke, ersterTreffer } from './photometrie.js';
+import { teilFlaeche, kollidiert, findeFlaeche, liegtAuf } from './montage.js';
 
 export const SCHEMA_VERSION = '1.0.0';
-const TYPEN = ['ledProfil', 'spot', 'punktlicht', 'flaechenlicht'];
+const TYPEN = ['ledProfil', 'linie', 'spot', 'punktlicht', 'flaechenlicht'];
 const SEGMENT = 50; // mm, Zerlegung linearer und flächiger Strahler
 const r1 = (v) => Math.round(v * 10) / 10 || 0;
 const r2 = (v) => Math.round(v * 100) / 100 || 0;
@@ -40,6 +40,14 @@ export function normalisiereLicht(eingabe) {
       l.streifen = { ...STREIFEN_STANDARD, ...(roh.streifen ?? {}) };
       if (roh.kelvin) l.streifen.kelvin = roh.kelvin;
       l.befestigung = { flaeche: 'unten', abstandVorne: 40, rand: 20, kabel: 'nut', ...(roh.befestigung ?? {}) };
+    } else if (typ === 'linie') {
+      // Gezeichnete Linie (Polylinie in Weltkoordinaten), die zur Lichtquelle wird
+      l.profil = String(roh.profil ?? 'aufbau');
+      l.streifen = { ...STREIFEN_STANDARD, ...(roh.streifen ?? {}) };
+      if (roh.kelvin) l.streifen.kelvin = roh.kelvin;
+      l.punkte = Array.isArray(roh.punkte) ? roh.punkte.filter((q) => istObjekt(q) && [q.x, q.y, q.z].every(Number.isFinite)) : [];
+      l.abstrahlung = roh.abstrahlung ?? 'auto';
+      l.befestigung = roh.befestigung ? { kabel: 'nut', ...roh.befestigung } : { kabel: roh.kabel ?? 'nut' };
     } else if (typ === 'spot') {
       l.modell = String(roh.modell ?? 'moebelspot58');
       const k = SPOTS[l.modell] ?? {};
@@ -167,6 +175,79 @@ export function berechneLicht(eingabe) {
         laenge: r1(laenge), streifenLaenge: streifen, watt: r2(watt), lumen: r1(lumen), kelvin: s.kelvin, spannung: s.spannung,
         abstrahlwinkel: s.abstrahlwinkel, wattProMeter: s.wattProMeter, bearbeitungen: ops.length,
       });
+    } else if (l.typ === 'linie') {
+      const pts = l.punkte;
+      const segmente = [];
+      for (let i = 0; i + 1 < pts.length; i++) {
+        const laenge = Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y, pts[i + 1].z - pts[i].z);
+        if (laenge > 0.01) segmente.push({ a: pts[i], b: pts[i + 1], laenge });
+      }
+      if (!segmente.length) { melde('fehler', 'PUNKTE_FEHLEN', l.id, 'Linie braucht mindestens zwei verschiedene Punkte'); continue; }
+      const profil = l.profil === 'keins' ? null : PROFILE[l.profil];
+      if (l.profil !== 'keins' && !profil) { melde('fehler', 'MODELL_UNBEKANNT', l.id, `Unbekanntes Profil „${l.profil}"`); continue; }
+      let tf = null;
+      if (l.befestigung.teil) {
+        tf = befestigeAn(l);
+        if (!tf) continue;
+        if (!pts.every((q) => liegtAuf(tf, q))) { melde('fehler', 'AUSSERHALB', l.id, `Linie liegt nicht vollständig auf ${tf.teil.id} (${tf.flaeche})`); continue; }
+      } else {
+        tf = findeFlaeche([...teile.values()], pts);
+      }
+      if (l.profil === 'einbau' && !tf) { melde('fehler', 'KEINE_FLAECHE', l.id, 'Einbauprofil braucht eine Möbelfläche: Linie liegt auf keiner Boden- oder Seitenfläche'); continue; }
+      const s = l.streifen;
+      const laenge = segmente.reduce((sum, g) => sum + g.laenge, 0);
+      const streifen = streifenLaenge(laenge, profil?.endkappe ?? 0, s.schnittraster);
+      const watt = (streifen / 1000) * s.wattProMeter;
+      const lumen = (streifen / 1000) * s.lumenProMeter * (profil?.wirkungsgrad ?? 1);
+      let richtung = null;
+      if (istObjekt(l.abstrahlung)) richtung = normiere(l.abstrahlung);
+      else if (l.abstrahlung !== 'rundum' && tf) {
+        const w = ((profil?.neigung ?? 0) * Math.PI) / 180;
+        richtung = normiere({
+          x: tf.normale.x * Math.cos(w) + tf.tiefenRichtung.x * Math.sin(w),
+          y: tf.normale.y * Math.cos(w) + tf.tiefenRichtung.y * Math.sin(w),
+          z: tf.normale.z * Math.cos(w) + tf.tiefenRichtung.z * Math.sin(w),
+        });
+      }
+      let ops = 0;
+      if (tf) {
+        const lp = pts.map((q) => tf.lokal(q));
+        if (profil?.nutBreite > 0 && l.profil === 'einbau') {
+          const nutTiefe = l.nutTiefe ?? profil.nutTiefe;
+          restwand(tf, nutTiefe, 'Profilnut', l.id);
+          for (let i = 0; i + 1 < lp.length; i++) {
+            if (Math.hypot(lp[i + 1].x - lp[i].x, lp[i + 1].y - lp[i].y) < 0.01) continue;
+            neueBearbeitung(tf.teil, { art: 'nut', flaeche: tf.flaeche, von: { x: lp[i].x, y: lp[i].y, z: tf.cnc.z }, bis: { x: lp[i + 1].x, y: lp[i + 1].y, z: tf.cnc.z }, richtung: tf.cnc.richtung, breite: profil.nutBreite, tiefe: nutTiefe, quelle: l.id });
+            ops++;
+          }
+        }
+        if (kabel(tf, lp[0].x, lp[0].y, l.befestigung.kabel, l.id)) ops++;
+      }
+      const max = MAX_STREIFEN_JE_EINSPEISUNG[s.spannung];
+      if (max && streifen > max) melde('warnung', 'SPANNUNGSABFALL', l.id, `${de(streifen / 1000)} m Streifen an ${s.spannung} V: über ${de(max / 1000)} m beidseitig einspeisen`);
+      // Teilstrahler entlang jedes Segments, Lichtstrom anteilig zur Länge
+      const n = cosExponent(s.abstrahlwinkel);
+      for (const g of segmente) {
+        const k = Math.max(1, Math.ceil(g.laenge / SEGMENT));
+        const anteil = (lumen * g.laenge) / laenge / k;
+        const normale = richtung ?? { x: 0, y: 0, z: 0 };
+        for (let i = 0; i < k; i++) {
+          const t = (i + 0.5) / k;
+          const p = { x: g.a.x + (g.b.x - g.a.x) * t, y: g.a.y + (g.b.y - g.a.y) * t, z: g.a.z + (g.b.z - g.a.z) * t };
+          strahler.push(richtung
+            ? { quelle: l.id, position: versetzt(p, normale), richtung, i0: spitzenLichtstaerke(anteil, s.abstrahlwinkel), n }
+            : { quelle: l.id, position: p, richtung: null, i0: anteil / (4 * Math.PI), n: 0 });
+        }
+      }
+      leuchten.push({
+        id: l.id, typ: l.typ, name: profil ? `Linienlicht (${profil.name})` : 'Linienlicht (LED-Streifen)', profil: l.profil,
+        teil: tf?.teil.id ?? null, flaeche: tf?.flaeche ?? null,
+        punkte: pts.map(vRund), anfang: vRund(pts[0]), ende: vRund(pts.at(-1)),
+        position: vRund(segmentMitte(segmente, laenge)), richtung: richtung ? vRich(richtung) : null,
+        laenge: r1(laenge), segmente: segmente.length, segmentLaengen: segmente.map((g) => r1(g.laenge)),
+        streifenLaenge: streifen, watt: r2(watt), lumen: r1(lumen), kelvin: s.kelvin, spannung: s.spannung,
+        abstrahlwinkel: richtung ? s.abstrahlwinkel : 360, wattProMeter: s.wattProMeter, bearbeitungen: ops,
+      });
     } else if (l.typ === 'spot') {
       const modell = SPOTS[l.modell];
       if (!modell) { melde('fehler', 'MODELL_UNBEKANNT', l.id, `Unbekannter Spot „${l.modell}"`); continue; }
@@ -274,7 +355,7 @@ export function berechneLicht(eingabe) {
   });
 
   // Beleuchtungsstärke
-  const hindernisse = (moebel?.teile ?? []).map((t) => ({ id: t.id, x0: t.lage.x, y0: t.lage.y, z0: t.lage.z, x1: t.lage.x + t.lage.dx, y1: t.lage.y + t.lage.dy, z1: t.lage.z + t.lage.dz }));
+  const hindernisse = (moebel?.teile ?? []).map((t) => ({ id: t.id, name: `${t.bezeichnung} ${t.id}`, x0: t.lage.x, y0: t.lage.y, z0: t.lage.z, x1: t.lage.x + t.lage.dx, y1: t.lage.y + t.lage.dy, z1: t.lage.z + t.lage.dz }));
   const beleuchtung = [];
   for (const pf of e.pruefflaechen) {
     let tf;
@@ -305,6 +386,9 @@ export function berechneLicht(eingabe) {
       werte.push(zeile);
     }
     const mittel = summe / (nx * ny);
+    if (max === 0 && strahler.length) {
+      melde('hinweis', 'KEIN_LICHT', pf.teil, `${pf.name}: kein Licht – ${diagnose(tf, strahler, hindernisse)}`);
+    }
     const u0 = mittel > 0 ? min / mittel : 0;
     if (pf.sollLux && mittel < pf.sollLux) melde('warnung', 'ZU_DUNKEL', null, `${pf.name}: ${Math.round(mittel)} lx statt ${pf.sollLux} lx`);
     if (mittel > 0 && u0 < 0.4) melde('hinweis', 'UNGLEICHMAESSIG', null, `${pf.name}: Gleichmäßigkeit U₀ = ${de(u0)} (Ränder deutlich dunkler)`);
@@ -317,15 +401,18 @@ export function berechneLicht(eingabe) {
 
   // Stückliste
   const stueckliste = [];
-  const profile = leuchten.filter((l) => l.typ === 'ledProfil');
+  const mitProfil = leuchten.filter((l) => (l.typ === 'ledProfil' || l.typ === 'linie') && PROFILE[l.profil]);
   for (const art of Object.keys(PROFILE)) {
-    const gruppe = profile.filter((l) => l.profil === art);
-    if (!gruppe.length) continue;
-    const stangen = stangenZuschnitt(gruppe.map((l) => l.laenge));
-    stueckliste.push({ position: PROFILE[art].name, menge: stangen, einheit: `Stangen à ${PROFIL_STANGE / 1000} m`, detail: `Zuschnitte ${gruppe.map((l) => `${de(l.laenge)} mm`).join(', ')}` });
+    const zuschnitte = mitProfil.filter((l) => l.profil === art).flatMap((l) => l.segmentLaengen ?? [l.laenge]);
+    if (!zuschnitte.length) continue;
+    const stangen = stangenZuschnitt(zuschnitte);
+    stueckliste.push({ position: PROFILE[art].name, menge: stangen, einheit: `Stangen à ${PROFIL_STANGE / 1000} m`, detail: `Zuschnitte ${zuschnitte.map((z) => `${de(z)} mm`).join(', ')}` });
     stueckliste.push({ position: `Diffusor ${PROFILE[art].diffusor}`, menge: stangen, einheit: `Stangen à ${PROFIL_STANGE / 1000} m`, detail: 'gleiche Zuschnitte wie Profil' });
   }
-  if (profile.length) stueckliste.push({ position: 'Endkappen', menge: profile.length * 2, einheit: 'Stück', detail: '2 je Profil' });
+  if (mitProfil.length) stueckliste.push({ position: 'Endkappen', menge: mitProfil.length * 2, einheit: 'Stück', detail: '2 je Profil bzw. Linie' });
+  const ecken = mitProfil.reduce((sum, l) => sum + Math.max(0, (l.segmente ?? 1) - 1), 0);
+  if (ecken) stueckliste.push({ position: 'Eckverbinder (Profil und Streifen)', menge: ecken, einheit: 'Stück', detail: 'an jedem Knick einer gezeichneten Linie' });
+  const profile = leuchten.filter((l) => l.streifenLaenge);
   const streifenGruppen = new Map();
   for (const l of profile) {
     const k = `${l.spannung}|${l.kelvin}|${l.wattProMeter}`;
@@ -348,13 +435,16 @@ export function berechneLicht(eingabe) {
   if (kabelLaengen.length) stueckliste.push({ position: 'Anschlusskabel 2 × 0,5 mm²', menge: r2(kabelGesamt), einheit: 'm', detail: 'Leuchte → Netzteil, inkl. 10 % und 30 cm Reserve je Leuchte' });
 
   // Render-Lichter (glTF KHR_lights_punctual-ähnlich, Meter und Candela)
-  const m = (p) => [r3(p.x / 1000), r3(p.y / 1000), r3(p.z / 1000)];
+  const m = (p) => [Math.round(p.x) / 1000, Math.round(p.y) / 1000, Math.round(p.z) / 1000];
   const renderLichter = leuchten.map((l) => {
     const farbe = kelvinZuRgb(l.kelvin);
     if (l.typ === 'spot') {
       return { id: l.id, typ: 'spot', position: m(l.position), richtung: [l.richtung.x, l.richtung.y, l.richtung.z], farbe, intensitaet: spitzenLichtstaerke(l.lumen, l.abstrahlwinkel), einheit: 'cd', innererKegel: innererKegel(l.abstrahlwinkel), aeussererKegel: ((l.abstrahlwinkel / 2) * Math.PI) / 180 };
     }
-    if (l.typ === 'ledProfil') return { id: l.id, typ: 'linie', anfang: m(l.anfang), ende: m(l.ende), richtung: [l.richtung.x, l.richtung.y, l.richtung.z], farbe, lumen: l.lumen, einheit: 'lm' };
+    if (l.typ === 'ledProfil' || l.typ === 'linie') {
+      const punkte = (l.punkte ?? [l.anfang, l.ende]).map(m);
+      return { id: l.id, typ: 'linie', punkte, anfang: punkte[0], ende: punkte.at(-1), richtung: l.richtung ? [l.richtung.x, l.richtung.y, l.richtung.z] : null, farbe, lumen: l.lumen, einheit: 'lm' };
+    }
     if (l.typ === 'flaechenlicht') return { id: l.id, typ: 'flaeche', position: m(l.position), richtung: [l.richtung.x, l.richtung.y, l.richtung.z], breite: l.breite / 1000, tiefe: l.tiefe / 1000, farbe, lumen: l.lumen, einheit: 'lm' };
     return { id: l.id, typ: 'punkt', position: m(l.position), farbe, intensitaet: l.lumen / (4 * Math.PI), einheit: 'cd' };
   });
@@ -373,6 +463,37 @@ export function berechneLicht(eingabe) {
     pruefungen,
     gueltig: !pruefungen.some((p) => p.schwere === 'fehler'),
   };
+}
+
+/** Warum erreicht kein Licht die Fläche? Prüft die Flächenmitte gegen alle Strahler. */
+function diagnose(tf, strahler, hindernisse) {
+  const p = versetzt(tf.welt(tf.laenge / 2, tf.breite / 2), tf.normale);
+  const verdeckt = new Map();
+  let zugewandt = 0;
+  for (const s of strahler) {
+    const v = { x: p.x - s.position.x, y: p.y - s.position.y, z: p.z - s.position.z };
+    const cosBeta = -(tf.normale.x * v.x + tf.normale.y * v.y + tf.normale.z * v.z);
+    const cosGamma = s.richtung ? s.richtung.x * v.x + s.richtung.y * v.y + s.richtung.z * v.z : 1;
+    if (cosBeta <= 0 || cosGamma <= 0) continue;
+    zugewandt++;
+    const treffer = ersterTreffer(s.position, p, hindernisse);
+    if (treffer) verdeckt.set(treffer.hindernis.name, (verdeckt.get(treffer.hindernis.name) ?? 0) + 1);
+  }
+  if (!zugewandt) return 'alle Leuchten strahlen von der Fläche weg (Fläche oder Abstrahlrichtung prüfen)';
+  if (verdeckt.size) return `verdeckt durch ${[...verdeckt.entries()].sort((a, b) => b[1] - a[1]).map(([n]) => n).slice(0, 3).join(', ')}`;
+  return 'Licht fällt nur auf die Ränder (Abstrahlwinkel oder Position prüfen)';
+}
+
+function segmentMitte(segmente, laenge) {
+  let rest = laenge / 2;
+  for (const g of segmente) {
+    if (rest <= g.laenge) {
+      const t = rest / g.laenge;
+      return { x: g.a.x + (g.b.x - g.a.x) * t, y: g.a.y + (g.b.y - g.a.y) * t, z: g.a.z + (g.b.z - g.a.z) * t };
+    }
+    rest -= g.laenge;
+  }
+  return segmente.at(-1).b;
 }
 
 /** Punkt 0,01 mm in Richtung v verschieben (Strahler bzw. Messpunkt liegt knapp vor der Fläche). */
